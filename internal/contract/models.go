@@ -9,18 +9,21 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"os"
 	"regexp"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/mindclade/estate-ci/internal/securefile"
 )
 
 const (
 	HealthSchemaVersion   = "estate.health/v1"
-	EvidenceSchemaVersion = "estate.evidence/v1"
+	EvidenceSchemaVersion = "estate.evidence/v2"
 	RequestSchemaVersion  = "estate.operation-request/v1"
 	ReceiptSchemaVersion  = "estate.operation-receipt/v1"
+	DispatchSchemaVersion = "estate.operation-dispatch/v1"
+	ResultSchemaVersion   = "estate.operation-dispatch-result/v1"
 )
 
 type Operation string
@@ -40,6 +43,7 @@ var (
 	keyIDPattern      = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{2,63}$`)
 	noncePattern      = regexp.MustCompile(`^[0-9a-f]{32}$`)
 	reasonCodePattern = regexp.MustCompile(`^[A-Z][A-Z0-9_]{2,63}$`)
+	recoveryPattern   = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
 )
 
 type RepositoryHealth struct {
@@ -174,9 +178,13 @@ func (snapshot EstateHealthSnapshot) VerifyDigest() error {
 }
 
 type ApprovalEvidence struct {
-	Approvers  []string `json:"approvers"`
-	ApprovedAt string   `json:"approved_at"`
-	Decision   string   `json:"decision"`
+	ApprovalID  string    `json:"approval_id"`
+	Operation   Operation `json:"operation"`
+	RequestedBy string    `json:"requested_by"`
+	Reason      string    `json:"reason"`
+	Approvers   []string  `json:"approvers"`
+	ApprovedAt  string    `json:"approved_at"`
+	Decision    string    `json:"decision"`
 }
 
 type WorkflowEvidence struct {
@@ -201,6 +209,7 @@ func (evidence *WorkflowEvidence) Seal() error {
 	for index := range evidence.Approval.Approvers {
 		evidence.Approval.Approvers[index] = strings.ToLower(evidence.Approval.Approvers[index])
 	}
+	evidence.Approval.RequestedBy = strings.ToLower(evidence.Approval.RequestedBy)
 	sort.Strings(evidence.Approval.Approvers)
 	if err := evidence.Validate(time.Time{}); err != nil {
 		return err
@@ -227,6 +236,10 @@ func (evidence WorkflowEvidence) Validate(now time.Time) error {
 	}
 	if evidence.Conclusion != "success" || evidence.Approval.Decision != "approved" {
 		return errors.New("evidence is not approved and successful")
+	}
+	if !requestIDPattern.MatchString(evidence.Approval.ApprovalID) || !AllowedOperation(evidence.Approval.Operation) ||
+		!emailPattern.MatchString(evidence.Approval.RequestedBy) || validateReason(evidence.Approval.Reason) != nil {
+		return errors.New("approval does not bind an exact operation, requester, and reason")
 	}
 	approvedAt, err := time.Parse(time.RFC3339, evidence.Approval.ApprovedAt)
 	if err != nil {
@@ -325,9 +338,34 @@ type OperationReceipt struct {
 	Signature         Signature `json:"signature"`
 }
 
+type OperationDispatch struct {
+	SchemaVersion string    `json:"schema_version"`
+	RequestID     string    `json:"request_id"`
+	RequestDigest string    `json:"request_digest"`
+	ReceiptID     string    `json:"receipt_id"`
+	RecoveryToken string    `json:"recovery_token"`
+	PreparedAt    string    `json:"prepared_at"`
+	Digest        string    `json:"digest"`
+	Signature     Signature `json:"signature"`
+}
+
+type OperationDispatchResult struct {
+	SchemaVersion     string    `json:"schema_version"`
+	RequestID         string    `json:"request_id"`
+	RequestDigest     string    `json:"request_digest"`
+	ReceiptID         string    `json:"receipt_id"`
+	Status            string    `json:"status"`
+	ReasonCode        string    `json:"reason_code"`
+	ProviderReference string    `json:"provider_reference"`
+	RecordedAt        string    `json:"recorded_at"`
+	Digest            string    `json:"digest"`
+	Signature         Signature `json:"signature"`
+}
+
 type Signer interface {
 	KeyID() string
 	Sign(message []byte) ([]byte, error)
+	PublicKey() ed25519.PublicKey
 }
 
 type Ed25519Signer struct {
@@ -351,13 +389,9 @@ func NewEphemeralSigner(keyID string) (*Ed25519Signer, error) {
 }
 
 func LoadEd25519Signer(keyID, path string) (*Ed25519Signer, error) {
-	info, err := os.Lstat(path)
-	if err != nil || !info.Mode().IsRegular() || info.Size() > 16*1024 || !privateKeyMode(info.Mode().Perm()) {
-		return nil, errors.New("signing key must be a small 0400, 0440, or 0600 regular file")
-	}
-	raw, err := os.ReadFile(path)
+	raw, err := securefile.ReadProjected(path, 16*1024, 0o400, 0o440, 0o600)
 	if err != nil {
-		return nil, errors.New("read signing key")
+		return nil, errors.New("signing key must be a small 0400, 0440, or 0600 projected or regular file")
 	}
 	block, rest := pem.Decode(raw)
 	if block == nil || block.Type != "PRIVATE KEY" || len(strings.TrimSpace(string(rest))) != 0 {
@@ -372,10 +406,6 @@ func LoadEd25519Signer(keyID, path string) (*Ed25519Signer, error) {
 		return nil, errors.New("signing key must use Ed25519")
 	}
 	return NewEd25519Signer(keyID, key)
-}
-
-func privateKeyMode(mode os.FileMode) bool {
-	return mode == 0o400 || mode == 0o440 || mode == 0o600
 }
 
 func (signer *Ed25519Signer) KeyID() string { return signer.keyID }
@@ -423,8 +453,8 @@ func (request OperationRequest) Validate(now time.Time) error {
 	if !digestPattern.MatchString(request.PlanDigest) || !digestPattern.MatchString(request.EvidenceDigest) {
 		return errors.New("plan or evidence digest is invalid")
 	}
-	if strings.TrimSpace(request.Reason) != request.Reason || len(request.Reason) < 10 || len(request.Reason) > 500 || strings.ContainsAny(request.Reason, "\r\n\x00") {
-		return errors.New("reason must be a single trimmed line of 10 to 500 characters")
+	if err := validateReason(request.Reason); err != nil {
+		return err
 	}
 	if !emailPattern.MatchString(request.RequestedBy) || !noncePattern.MatchString(request.Nonce) {
 		return errors.New("requester or nonce is invalid")
@@ -442,6 +472,13 @@ func (request OperationRequest) Validate(now time.Time) error {
 	}
 	if request.Operation != OperationRefreshHealth && request.WorkflowRunID <= 0 {
 		return errors.New("workflow-run operation requires workflow_run_id")
+	}
+	return nil
+}
+
+func validateReason(reason string) error {
+	if strings.TrimSpace(reason) != reason || len(reason) < 10 || len(reason) > 500 || strings.ContainsAny(reason, "\r\n\x00") {
+		return errors.New("reason must be a single trimmed line of 10 to 500 characters")
 	}
 	return nil
 }
@@ -497,6 +534,142 @@ func SealReceipt(receipt *OperationReceipt, signer Signer) error {
 	receipt.Digest = digest
 	receipt.Signature = Signature{Algorithm: "Ed25519", KeyID: signer.KeyID(), Value: base64.RawURLEncoding.EncodeToString(signed)}
 	return nil
+}
+
+func SealDispatch(dispatch *OperationDispatch, signer Signer) error {
+	if dispatch.SchemaVersion == "" {
+		dispatch.SchemaVersion = DispatchSchemaVersion
+	}
+	if err := dispatch.validateMaterial(); err != nil {
+		return err
+	}
+	material := *dispatch
+	material.Digest = ""
+	material.Signature = Signature{}
+	digest, err := Digest(material)
+	if err != nil {
+		return err
+	}
+	signed, err := signer.Sign([]byte(digest))
+	if err != nil {
+		return fmt.Errorf("sign operation dispatch: %w", err)
+	}
+	dispatch.Digest = digest
+	dispatch.Signature = Signature{Algorithm: "Ed25519", KeyID: signer.KeyID(), Value: base64.RawURLEncoding.EncodeToString(signed)}
+	return nil
+}
+
+func (dispatch OperationDispatch) validateMaterial() error {
+	if dispatch.SchemaVersion != DispatchSchemaVersion || !requestIDPattern.MatchString(dispatch.RequestID) ||
+		!requestIDPattern.MatchString(dispatch.ReceiptID) || !digestPattern.MatchString(dispatch.RequestDigest) ||
+		len(dispatch.RecoveryToken) > 4096 || !recoveryPattern.MatchString(dispatch.RecoveryToken) {
+		return errors.New("operation dispatch identity or recovery token is invalid")
+	}
+	if _, err := time.Parse(time.RFC3339, dispatch.PreparedAt); err != nil {
+		return errors.New("operation dispatch prepared_at is invalid")
+	}
+	return nil
+}
+
+func (dispatch OperationDispatch) VerifyDigest() error {
+	if err := dispatch.validateMaterial(); err != nil || !digestPattern.MatchString(dispatch.Digest) {
+		return errors.New("operation dispatch is invalid or unsealed")
+	}
+	if err := validateSignature(dispatch.Signature, ""); err != nil {
+		return err
+	}
+	want := dispatch.Digest
+	dispatch.Digest = ""
+	dispatch.Signature = Signature{}
+	got, err := Digest(dispatch)
+	if err != nil || subtle.ConstantTimeCompare([]byte(want), []byte(got)) != 1 {
+		return errors.New("operation dispatch digest does not bind its canonical content")
+	}
+	return nil
+}
+
+func (dispatch OperationDispatch) VerifySignature(expectedKeyID string, publicKey ed25519.PublicKey) error {
+	if err := dispatch.VerifyDigest(); err != nil {
+		return err
+	}
+	if err := validateSignature(dispatch.Signature, expectedKeyID); err != nil {
+		return err
+	}
+	material := dispatch
+	material.Digest = ""
+	material.Signature = Signature{}
+	return verifySignature(material, dispatch.Digest, dispatch.Signature, publicKey)
+}
+
+func SealDispatchResult(result *OperationDispatchResult, signer Signer) error {
+	if result.SchemaVersion == "" {
+		result.SchemaVersion = ResultSchemaVersion
+	}
+	if err := result.validateMaterial(); err != nil {
+		return err
+	}
+	material := *result
+	material.Digest = ""
+	material.Signature = Signature{}
+	digest, err := Digest(material)
+	if err != nil {
+		return err
+	}
+	signed, err := signer.Sign([]byte(digest))
+	if err != nil {
+		return fmt.Errorf("sign operation dispatch result: %w", err)
+	}
+	result.Digest = digest
+	result.Signature = Signature{Algorithm: "Ed25519", KeyID: signer.KeyID(), Value: base64.RawURLEncoding.EncodeToString(signed)}
+	return nil
+}
+
+func (result OperationDispatchResult) validateMaterial() error {
+	if result.SchemaVersion != ResultSchemaVersion || !requestIDPattern.MatchString(result.RequestID) ||
+		!requestIDPattern.MatchString(result.ReceiptID) || !digestPattern.MatchString(result.RequestDigest) {
+		return errors.New("operation dispatch result identity is invalid")
+	}
+	if result.Status != "accepted" && result.Status != "rejected" || !reasonCodePattern.MatchString(result.ReasonCode) {
+		return errors.New("operation dispatch result status is invalid")
+	}
+	if len(result.ProviderReference) > 512 || strings.ContainsAny(result.ProviderReference, "\r\n\x00") ||
+		result.ProviderReference != "" && !strings.HasPrefix(result.ProviderReference, "https://") && !strings.HasPrefix(result.ProviderReference, "simulation://") {
+		return errors.New("operation dispatch result provider reference is invalid")
+	}
+	if _, err := time.Parse(time.RFC3339, result.RecordedAt); err != nil {
+		return errors.New("operation dispatch result recorded_at is invalid")
+	}
+	return nil
+}
+
+func (result OperationDispatchResult) VerifyDigest() error {
+	if err := result.validateMaterial(); err != nil || !digestPattern.MatchString(result.Digest) {
+		return errors.New("operation dispatch result is invalid or unsealed")
+	}
+	if err := validateSignature(result.Signature, ""); err != nil {
+		return err
+	}
+	want := result.Digest
+	result.Digest = ""
+	result.Signature = Signature{}
+	got, err := Digest(result)
+	if err != nil || subtle.ConstantTimeCompare([]byte(want), []byte(got)) != 1 {
+		return errors.New("operation dispatch result digest does not bind its canonical content")
+	}
+	return nil
+}
+
+func (result OperationDispatchResult) VerifySignature(expectedKeyID string, publicKey ed25519.PublicKey) error {
+	if err := result.VerifyDigest(); err != nil {
+		return err
+	}
+	if err := validateSignature(result.Signature, expectedKeyID); err != nil {
+		return err
+	}
+	material := result
+	material.Digest = ""
+	material.Signature = Signature{}
+	return verifySignature(material, result.Digest, result.Signature, publicKey)
 }
 
 func (receipt OperationReceipt) validateMaterial() error {
@@ -591,6 +764,8 @@ func AllowedOperation(operation Operation) bool {
 		return false
 	}
 }
+
+func ValidRequestID(value string) bool { return requestIDPattern.MatchString(value) }
 
 func Timestamp(value time.Time) string {
 	return value.UTC().Truncate(time.Second).Format(time.RFC3339)

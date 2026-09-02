@@ -9,7 +9,7 @@ const schemas = {
   health: load("estate-health-v1.schema.json"),
   request: load("operation-request-v1.schema.json"),
   receipt: load("operation-receipt-v1.schema.json"),
-  evidence: load("workflow-evidence-v1.schema.json"),
+  evidence: load("workflow-evidence-v2.schema.json"),
 };
 
 const ajv = new Ajv2020({ allErrors: true, strict: true, formats: {
@@ -24,9 +24,10 @@ const receiptId = "22222222-2222-4222-8222-222222222222";
 const signature = { algorithm: "Ed25519", key_id: "test-key-v1", value: "A".repeat(86) };
 
 const evidence = {
-  schema_version: "estate.evidence/v1", repository: "mindclade/.github", workflow_id: 42, workflow_run_id: 84,
+  schema_version: "estate.evidence/v2", repository: "mindclade/.github", workflow_id: 42, workflow_run_id: 84,
   protected_main_sha: sha, plan_digest: digest, conclusion: "success", superseded: true,
-  approval: { approvers: ["approver@mindclade.example"], approved_at: "2026-09-02T10:00:00Z", decision: "approved" },
+  approval: { approval_id: requestId, operation: "rerun_failed_required_workflow", requested_by: "operator@mindclade.example",
+    reason: "Retry after runner recovery", approvers: ["approver@mindclade.example"], approved_at: "2026-09-02T10:00:00Z", decision: "approved" },
   observed_at: "2026-09-02T10:00:00Z", expires_at: "2026-09-02T11:00:00Z", digest,
 };
 
@@ -37,7 +38,7 @@ const request = {
   issued_at: "2026-09-02T10:00:00Z", expires_at: "2026-09-02T10:05:00Z", nonce: "b".repeat(32), digest, signature,
 };
 
-describe("published v1 schemas", () => {
+describe("published operation and evidence schemas", () => {
   it("accepts the canonical models including the .github repository", () => {
     const health = {
       schema_version: "estate.health/v1", snapshot_id: requestId, observed_at: "2026-09-02T10:00:00Z",

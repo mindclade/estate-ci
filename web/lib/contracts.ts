@@ -25,7 +25,7 @@ export type EstateHealthSnapshot = {
 };
 
 export type WorkflowEvidence = {
-  schema_version: "estate.evidence/v1";
+  schema_version: "estate.evidence/v2";
   repository: string;
   workflow_id: number;
   workflow_run_id: number;
@@ -33,7 +33,15 @@ export type WorkflowEvidence = {
   plan_digest: string;
   conclusion: string;
   superseded: boolean;
-  approval: { approvers: string[]; approved_at: string; decision: string };
+  approval: {
+    approval_id: string;
+    operation: OperationName;
+    requested_by: string;
+    reason: string;
+    approvers: string[];
+    approved_at: string;
+    decision: string;
+  };
   observed_at: string;
   expires_at: string;
   digest: string;

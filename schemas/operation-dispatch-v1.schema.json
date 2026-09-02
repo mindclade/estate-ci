@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://estate-ci.mindclade.dev/schemas/operation-dispatch-v1.schema.json",
+  "title": "OperationDispatch",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_id", "request_digest", "receipt_id", "recovery_token", "prepared_at", "digest", "signature"],
+  "properties": {
+    "schema_version": {"const": "estate.operation-dispatch/v1"},
+    "request_id": {"$ref": "operation-request-v1.schema.json#/$defs/uuidv4"},
+    "request_digest": {"$ref": "operation-request-v1.schema.json#/$defs/digest"},
+    "receipt_id": {"$ref": "operation-request-v1.schema.json#/$defs/uuidv4"},
+    "recovery_token": {"type": "string", "minLength": 1, "maxLength": 4096, "pattern": "^[A-Za-z0-9_-]+$"},
+    "prepared_at": {"type": "string", "format": "date-time"},
+    "digest": {"$ref": "operation-request-v1.schema.json#/$defs/digest"},
+    "signature": {"$ref": "operation-request-v1.schema.json#/$defs/signature"}
+  }
+}

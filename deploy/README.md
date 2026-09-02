@@ -10,5 +10,7 @@ bind the GKE service account to a dedicated Google service account, provide real
 IAP, route `/api/*` directly to the API and all other paths to the web service, and replace the fixed
 catalog with observed workflow IDs. Connected mode additionally mounts distinct observation and
 dispatch GitHub App keys and sets `ESTATE_MODE=connected` only after a no-mutation canary passes.
+Standard projected Secret volumes are supported; resolved key files must stay within their mounted
+directory and retain mode 0400, 0440, or 0600.
 
 No manifest in this repository should be applied directly to a cluster.

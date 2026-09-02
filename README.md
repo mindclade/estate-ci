@@ -10,7 +10,9 @@ or live mutation has been created or validated from this source.
 - Google Cloud IAP authenticates every `/api/v1/*` request. The API verifies the ES256 signature,
   exact IAP issuer, exact configured audience, and validity window before reading identity claims.
 - Google Workspace groups resolve `viewer`, `operator`, `approver`, and `admin` roles through Cloud
-  Identity. Resolution failures deny access. A distinct approver is required for every operation.
+  Identity. Resolution failures deny access. V2 approval evidence binds one exact operation,
+  requester, reason, repository, workflow/run, protected SHA, and plan; a distinct approver is
+  required and the evidence digest is consumed once.
 - Browsers receive no Google or GitHub credential. The API uses GKE Workload Identity through the
   metadata server; there is no service-account key, OAuth client secret, or database.
 - Health and audit records use canonical JSON, SHA-256 content digests, and create-only GCS writes.
@@ -19,6 +21,10 @@ or live mutation has been created or validated from this source.
   operation, repository, workflow ID/run ID, protected `main` SHA, plan digest, and evidence digest.
 - A second create-only replay reservation binds that operation tuple independently of the request
   UUID, so changing only the UUID cannot repeat an operation against the same evidence.
+- Before mutation, a signed create-only dispatch record fixes the recovery state and receipt ID. A
+  signed final result is persisted before the public receipt. Identical retries resume this outbox;
+  ambiguous provider responses remain pending until observation proves the outcome and are never
+  converted into a false rejection or a blind second mutation.
 - Separate GitHub Apps observe repository state and perform the approved mutation. The broker
   re-observes protected `main` and the workflow run immediately before dispatch.
 
@@ -26,7 +32,7 @@ The exact operation allowlist is:
 
 | Operation | Connected action |
 | --- | --- |
-| `refresh_estate_health` | Dispatch the catalogued health workflow on `main` |
+| `refresh_estate_health` | Dispatch the catalogued health workflow at the observed `main` SHA |
 | `rerun_failed_required_workflow` | Rerun failed jobs for the bound failed run |
 | `cancel_superseded_workflow_run` | Cancel the bound queued/running superseded run |
 
@@ -43,6 +49,9 @@ input. Anything absent from the fixed catalog fails closed.
 - `web`: Next.js operations console for overview, repository health, history, evidence, and operations.
 - `schemas` and `api/openapi.json`: versioned interchange contracts.
 - `deploy/base`: deliberately non-connectable GitOps handoff manifests.
+
+Workflow evidence v1 remains published as an immutable historical schema. The operation service
+accepts only v2 evidence because v1 has no exact approval binding or stable single-use identity.
 
 ## Local development
 
@@ -93,6 +102,10 @@ The POST route is the only mutation surface. It additionally requires operator r
 `Sec-Fetch-Site: same-origin`, double-submit CSRF, `application/json`, a 32 KiB body limit, and the
 closed v1 intent schema. See `api/openapi.json` for the wire contract.
 
+Retry an ambiguous or interrupted submission with the exact same request body and request ID. A
+changed request ID cannot consume the approval again. `OPERATION_PENDING_RECONCILIATION` means the
+durable outbox exists but GitHub observation has not yet proved a final result.
+
 ## Runtime configuration
 
 | Setting | Contract |
@@ -125,7 +138,9 @@ GitHub App identities. Activation is owned by reviewed configuration in the `git
 5. Install separate observation and dispatch GitHub Apps with repository-scoped permissions.
 6. Resolve every catalog workflow ID from GitHub, review it, and change `connected` to `true`.
 7. Mount separate GitHub App keys and an Ed25519 operation signing key as 0400/0600 owner-only
-   files or 0440 files readable only by the dedicated pod `fsGroup`.
+   files or 0440 files readable only by the dedicated pod `fsGroup`. Kubernetes projected Secret
+   `..data` links are accepted only when their resolved regular files remain inside the configured
+   mount directory; escaping links and unsafe modes fail startup.
 8. Exercise a no-mutation canary, then qualify each allowlisted operation with recorded evidence.
 
 The base manifests retain invalid image digests, placeholder identities, unresolved workflow IDs,

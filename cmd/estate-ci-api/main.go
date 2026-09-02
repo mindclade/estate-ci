@@ -260,10 +260,15 @@ func seedDevelopment(repository *storage.MemoryRepository, catalog *operations.C
 	for index, target := range catalog.Repositories() {
 		workflowID := target.WorkflowIDs[string(contract.OperationRerunFailed)]
 		planDigest := fmt.Sprintf("sha256:%064x", index+1)
+		approvedReason := "Retry the failed required workflow after runner recovery"
 		evidence := contract.WorkflowEvidence{
 			Repository: target.Repository, WorkflowID: workflowID, WorkflowRunID: int64(10000 + index), ProtectedMainSHA: mainSHA,
 			PlanDigest: planDigest, Conclusion: "success", Superseded: true,
-			Approval:   contract.ApprovalEvidence{Approvers: []string{"approver@mindclade.example"}, ApprovedAt: contract.Timestamp(now), Decision: "approved"},
+			Approval: contract.ApprovalEvidence{
+				ApprovalID: fmt.Sprintf("10000000-0000-4000-8000-%012d", index+100), Operation: contract.OperationRerunFailed,
+				RequestedBy: "dev@mindclade.example", Reason: approvedReason,
+				Approvers: []string{"approver@mindclade.example"}, ApprovedAt: contract.Timestamp(now), Decision: "approved",
+			},
 			ObservedAt: contract.Timestamp(now), ExpiresAt: contract.Timestamp(now.Add(24 * time.Hour)),
 		}
 		if err := evidence.Seal(); err != nil {

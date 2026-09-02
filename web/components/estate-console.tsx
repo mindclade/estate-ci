@@ -257,6 +257,10 @@ function Evidence({ evidence, repositories, onSelect }: { evidence: WorkflowEvid
         <EvidenceField label="Protected main" value={evidence.protected_main_sha} code />
         <EvidenceField label="Plan digest" value={evidence.plan_digest} code />
         <EvidenceField label="Evidence digest" value={evidence.digest} code />
+        <EvidenceField label="Approval ID" value={evidence.approval.approval_id} code />
+        <EvidenceField label="Approved operation" value={operationLabel(evidence.approval.operation)} />
+        <EvidenceField label="Approved requester" value={evidence.approval.requested_by} />
+        <EvidenceField label="Approved reason" value={evidence.approval.reason} />
         <EvidenceField label="Approvers" value={evidence.approval.approvers.join(", ")} />
         <EvidenceField label="Expires" value={timestamp(evidence.expires_at)} />
       </dl> : <div className="empty-state">No evidence selected</div>}
@@ -280,10 +284,17 @@ function Operations({ session, repositories, targets, receipts, onReceipt }: { s
 
   useEffect(() => {
     if (!health) return;
-    api<WorkflowEvidence>(`/api/v1/evidence?digest=${encodeURIComponent(health.evidence_digest)}`).then(setSelectedEvidence).catch((error: Error) => setMessage(error.message));
+    api<WorkflowEvidence>(`/api/v1/evidence?digest=${encodeURIComponent(health.evidence_digest)}`).then((approved) => {
+      setSelectedEvidence(approved);
+      setOperation(approved.approval.operation);
+      setReason(approved.approval.reason);
+    }).catch((error: Error) => setMessage(error.message));
   }, [health]);
 
-  const canOperate = session.operation_submission_enabled && ["operator", "approver", "admin"].includes(session.role) && target && selectedEvidence;
+  const approvalMatches = selectedEvidence?.approval.operation === operation &&
+    selectedEvidence.approval.requested_by === session.email && selectedEvidence.approval.reason === reason &&
+    selectedEvidence.repository === repository && selectedEvidence.workflow_id === target?.workflow_ids[operation];
+  const canOperate = session.operation_submission_enabled && ["operator", "approver", "admin"].includes(session.role) && target && selectedEvidence && approvalMatches;
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!target || !selectedEvidence) return;

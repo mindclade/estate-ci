@@ -41,7 +41,11 @@ func apiFixture(t *testing.T) (*Server, contract.OperationIntent) {
 	evidence := contract.WorkflowEvidence{
 		Repository: "mindclade/bootstrap", WorkflowID: 42, WorkflowRunID: 84,
 		ProtectedMainSHA: testSHA, PlanDigest: testDigest, Conclusion: "success",
-		Approval:   contract.ApprovalEvidence{Approvers: []string{"approver@mindclade.example"}, ApprovedAt: contract.Timestamp(now), Decision: "approved"},
+		Approval: contract.ApprovalEvidence{
+			ApprovalID: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", Operation: contract.OperationRerunFailed,
+			RequestedBy: "operator@mindclade.example", Reason: "Retry the failed required workflow after runner recovery",
+			Approvers: []string{"approver@mindclade.example"}, ApprovedAt: contract.Timestamp(now), Decision: "approved",
+		},
 		ObservedAt: contract.Timestamp(now), ExpiresAt: contract.Timestamp(now.Add(time.Hour)),
 	}
 	if err := evidence.Seal(); err != nil {
@@ -139,8 +143,8 @@ func TestAPICSRFAndDuplicateProtection(t *testing.T) {
 	if got := post(true).Code; got != http.StatusAccepted {
 		t.Fatalf("valid operation status=%d", got)
 	}
-	if got := post(true).Code; got != http.StatusConflict {
-		t.Fatalf("duplicate operation status=%d", got)
+	if got := post(true).Code; got != http.StatusAccepted {
+		t.Fatalf("idempotent duplicate operation status=%d", got)
 	}
 }
 

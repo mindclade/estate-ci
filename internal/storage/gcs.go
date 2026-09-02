@@ -201,15 +201,18 @@ func (repository *GCSRepository) GetEvidence(ctx context.Context, digest string)
 	return evidence, nil
 }
 
-func (repository *GCSRepository) ReserveRequest(ctx context.Context, requestID, bindingDigest, nonce, expiresAt string) error {
-	if err := validateReservation(requestID, bindingDigest, nonce, expiresAt); err != nil {
+func (repository *GCSRepository) ReserveRequest(ctx context.Context, requestID, bindingDigest, approvalID, nonce, expiresAt string) error {
+	if err := validateReservation(requestID, bindingDigest, approvalID, nonce, expiresAt); err != nil {
 		return err
 	}
-	payload, _ := contract.CanonicalJSON(map[string]string{"request_id": requestID, "binding_digest": bindingDigest, "nonce": nonce, "expires_at": expiresAt})
+	payload, _ := contract.CanonicalJSON(map[string]string{"request_id": requestID, "binding_digest": bindingDigest, "approval_id": approvalID, "nonce": nonce, "expires_at": expiresAt})
 	if err := repository.objects.Create(ctx, repository.auditBucket, "audit/replay/requests/"+requestID+".json", payload); err != nil {
 		return err
 	}
-	return repository.objects.Create(ctx, repository.auditBucket, "audit/replay/bindings/"+strings.TrimPrefix(bindingDigest, "sha256:")+".json", payload)
+	if err := repository.objects.Create(ctx, repository.auditBucket, "audit/replay/bindings/"+strings.TrimPrefix(bindingDigest, "sha256:")+".json", payload); err != nil {
+		return err
+	}
+	return repository.objects.Create(ctx, repository.auditBucket, "audit/replay/approvals/"+approvalID+".json", payload)
 }
 
 func (repository *GCSRepository) PutRequest(ctx context.Context, request contract.OperationRequest) error {
@@ -223,6 +226,73 @@ func (repository *GCSRepository) PutRequest(ctx context.Context, request contrac
 	return repository.objects.Create(ctx, repository.auditBucket, "audit/requests/"+request.RequestID+".json", payload)
 }
 
+func (repository *GCSRepository) GetRequest(ctx context.Context, requestID string) (contract.OperationRequest, error) {
+	if !contract.ValidRequestID(requestID) {
+		return contract.OperationRequest{}, ErrNotFound
+	}
+	raw, err := repository.objects.Get(ctx, repository.auditBucket, "audit/requests/"+requestID+".json")
+	if err != nil {
+		return contract.OperationRequest{}, err
+	}
+	var request contract.OperationRequest
+	if err := strictJSON(raw, &request); err != nil || request.VerifyDigest(time.Time{}) != nil {
+		return contract.OperationRequest{}, errors.New("stored operation request is invalid")
+	}
+	return request, nil
+}
+
+func (repository *GCSRepository) PutDispatch(ctx context.Context, dispatch contract.OperationDispatch) error {
+	if err := dispatch.VerifyDigest(); err != nil {
+		return errors.New("operation dispatch is invalid or unsealed")
+	}
+	payload, err := contract.CanonicalJSON(dispatch)
+	if err != nil {
+		return err
+	}
+	return repository.objects.Create(ctx, repository.auditBucket, "audit/outbox/"+dispatch.RequestID+"/dispatch.json", payload)
+}
+
+func (repository *GCSRepository) GetDispatch(ctx context.Context, requestID string) (contract.OperationDispatch, error) {
+	if !contract.ValidRequestID(requestID) {
+		return contract.OperationDispatch{}, ErrNotFound
+	}
+	raw, err := repository.objects.Get(ctx, repository.auditBucket, "audit/outbox/"+requestID+"/dispatch.json")
+	if err != nil {
+		return contract.OperationDispatch{}, err
+	}
+	var dispatch contract.OperationDispatch
+	if err := strictJSON(raw, &dispatch); err != nil || dispatch.VerifyDigest() != nil {
+		return contract.OperationDispatch{}, errors.New("stored operation dispatch is invalid")
+	}
+	return dispatch, nil
+}
+
+func (repository *GCSRepository) PutDispatchResult(ctx context.Context, result contract.OperationDispatchResult) error {
+	if err := result.VerifyDigest(); err != nil {
+		return errors.New("operation dispatch result is invalid or unsealed")
+	}
+	payload, err := contract.CanonicalJSON(result)
+	if err != nil {
+		return err
+	}
+	return repository.objects.Create(ctx, repository.auditBucket, "audit/outbox/"+result.RequestID+"/result.json", payload)
+}
+
+func (repository *GCSRepository) GetDispatchResult(ctx context.Context, requestID string) (contract.OperationDispatchResult, error) {
+	if !contract.ValidRequestID(requestID) {
+		return contract.OperationDispatchResult{}, ErrNotFound
+	}
+	raw, err := repository.objects.Get(ctx, repository.auditBucket, "audit/outbox/"+requestID+"/result.json")
+	if err != nil {
+		return contract.OperationDispatchResult{}, err
+	}
+	var result contract.OperationDispatchResult
+	if err := strictJSON(raw, &result); err != nil || result.VerifyDigest() != nil {
+		return contract.OperationDispatchResult{}, errors.New("stored operation dispatch result is invalid")
+	}
+	return result, nil
+}
+
 func (repository *GCSRepository) PutReceipt(ctx context.Context, receipt contract.OperationReceipt) error {
 	if err := receipt.VerifyDigest(); err != nil {
 		return errors.New("operation receipt is invalid or unsealed")
@@ -232,6 +302,21 @@ func (repository *GCSRepository) PutReceipt(ctx context.Context, receipt contrac
 		return err
 	}
 	return repository.objects.Create(ctx, repository.auditBucket, ReceiptObject(receipt), payload)
+}
+
+func (repository *GCSRepository) GetReceiptByObject(ctx context.Context, objectName string) (contract.OperationReceipt, error) {
+	if !regexp.MustCompile(`^audit/operations/[0-9]{4}/[0-9]{2}/[0-9]{2}/[0-9a-f-]{36}\.json$`).MatchString(objectName) {
+		return contract.OperationReceipt{}, ErrNotFound
+	}
+	raw, err := repository.objects.Get(ctx, repository.auditBucket, objectName)
+	if err != nil {
+		return contract.OperationReceipt{}, err
+	}
+	var receipt contract.OperationReceipt
+	if err := strictJSON(raw, &receipt); err != nil || receipt.VerifyDigest() != nil || receipt.AuditObject != objectName {
+		return contract.OperationReceipt{}, errors.New("stored operation receipt is invalid")
+	}
+	return receipt, nil
 }
 
 func (repository *GCSRepository) GetReceipt(ctx context.Context, receiptID string) (contract.OperationReceipt, error) {

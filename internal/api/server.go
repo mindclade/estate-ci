@@ -306,7 +306,9 @@ func (server *Server) createOperation(writer http.ResponseWriter, request *http.
 	if err != nil {
 		switch {
 		case errors.Is(err, operations.ErrReplay):
-			problem(writer, http.StatusConflict, "OPERATION_REPLAYED", "This request identity has already been used.")
+			problem(writer, http.StatusConflict, "OPERATION_REPLAYED", "This request identity or approval has already been used.")
+		case errors.Is(err, operations.ErrPending):
+			problem(writer, http.StatusServiceUnavailable, "OPERATION_PENDING_RECONCILIATION", "The provider outcome is pending observation; retry this exact request without changing its request ID.")
 		case errors.Is(err, operations.ErrDenied):
 			problem(writer, http.StatusForbidden, "OPERATION_DENIED", "Approval or evidence policy denied this operation.")
 		case errors.Is(err, operations.ErrUnready) && receipt.ReceiptID != "":

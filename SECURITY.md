@@ -18,8 +18,9 @@ fixes apply to the latest `main` revision only until a release policy is publish
 - Operation inputs remain limited to the fixed catalog and exact allowlist.
 - GCS audit writes remain create-only; retention is 400 days.
 - No long-lived Google credential, OAuth client secret, browser credential, or database is added.
-- Connected failures deny operations and retain a signed rejection receipt where a request was
-  already accepted into the audit boundary.
+- Connected precondition failures deny operations with a signed rejection receipt. Ambiguous
+  provider outcomes retain a signed pending dispatch record and are reconciled by observation;
+  they are never represented as a rejection or automatically dispatched twice.
 
 Changes to authentication, authorization, schemas, signatures, catalog validation, storage,
 GitHub App dispatch, containers, or deployment configuration require code-owner review and focused

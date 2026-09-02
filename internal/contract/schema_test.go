@@ -13,9 +13,12 @@ func TestPublishedSchemasAndOpenAPIParseAndStayVersioned(t *testing.T) {
 	root := filepath.Clean(filepath.Join(filepath.Dir(source), "..", ".."))
 	paths := []string{
 		"schemas/estate-health-v1.schema.json",
+		"schemas/operation-dispatch-result-v1.schema.json",
+		"schemas/operation-dispatch-v1.schema.json",
 		"schemas/operation-request-v1.schema.json",
 		"schemas/operation-receipt-v1.schema.json",
 		"schemas/workflow-evidence-v1.schema.json",
+		"schemas/workflow-evidence-v2.schema.json",
 		"api/openapi.json",
 	}
 	for _, relative := range paths {

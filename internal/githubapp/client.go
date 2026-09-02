@@ -16,7 +16,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"regexp"
 	"strings"
 	"sync"
@@ -24,6 +23,7 @@ import (
 
 	"github.com/mindclade/estate-ci/internal/contract"
 	"github.com/mindclade/estate-ci/internal/operations"
+	"github.com/mindclade/estate-ci/internal/securefile"
 )
 
 type TokenSource interface {
@@ -102,17 +102,9 @@ func (source *InstallationTokenSource) Token(ctx context.Context) (string, error
 }
 
 func readPrivateKey(path string) (*rsa.PrivateKey, error) {
-	info, err := os.Lstat(path)
-	mode := os.FileMode(0)
-	if info != nil {
-		mode = info.Mode().Perm()
-	}
-	if err != nil || !info.Mode().IsRegular() || info.Size() > 64*1024 || mode != 0o400 && mode != 0o440 && mode != 0o600 {
-		return nil, errors.New("GitHub App private key must be a small 0400, 0440, or 0600 regular file")
-	}
-	raw, err := os.ReadFile(path)
+	raw, err := securefile.ReadProjected(path, 64*1024, 0o400, 0o440, 0o600)
 	if err != nil {
-		return nil, errors.New("read GitHub App private key")
+		return nil, errors.New("GitHub App private key must be a small 0400, 0440, or 0600 projected or regular file")
 	}
 	block, rest := pem.Decode(raw)
 	if block == nil || len(bytes.TrimSpace(rest)) != 0 || block.Type != "RSA PRIVATE KEY" && block.Type != "PRIVATE KEY" {
@@ -192,6 +184,7 @@ type WorkflowRun struct {
 	Status     string `json:"status"`
 	Conclusion string `json:"conclusion"`
 	HTMLURL    string `json:"html_url"`
+	RunAttempt int64  `json:"run_attempt"`
 }
 
 func (client *Client) ObserveMain(ctx context.Context, repository string) (string, bool, error) {
@@ -213,6 +206,20 @@ func (client *Client) ObserveRun(ctx context.Context, repository string, runID i
 		return WorkflowRun{}, err
 	}
 	return run, nil
+}
+
+func (client *Client) ObserveWorkflowRuns(ctx context.Context, repository string, workflowID int64, headSHA string) ([]WorkflowRun, error) {
+	var payload struct {
+		WorkflowRuns []WorkflowRun `json:"workflow_runs"`
+	}
+	path := fmt.Sprintf("/repos/%s/actions/workflows/%d/runs?branch=main&event=workflow_dispatch&head_sha=%s&per_page=100", repository, workflowID, headSHA)
+	if err := client.get(ctx, path, &payload); err != nil {
+		return nil, err
+	}
+	if len(payload.WorkflowRuns) > 100 {
+		return nil, errors.New("GitHub workflow run observation exceeds its fixed bound")
+	}
+	return payload.WorkflowRuns, nil
 }
 
 func (client *Client) get(ctx context.Context, path string, destination any) error {
@@ -243,7 +250,7 @@ func (client *Client) mutate(ctx context.Context, request contract.OperationRequ
 		body = []byte("{}")
 	case contract.OperationRefreshHealth:
 		methodPath = fmt.Sprintf("/repos/%s/actions/workflows/%d/dispatches", request.Repository, request.WorkflowID)
-		body = []byte(`{"ref":"main"}`)
+		body = []byte(fmt.Sprintf(`{"ref":"%s"}`, request.ProtectedMainSHA))
 	default:
 		return 0, errors.New("unsupported GitHub mutation")
 	}
@@ -281,6 +288,17 @@ type Broker struct {
 	dispatcher *Client
 }
 
+type recoveryState struct {
+	Operation          contract.Operation `json:"operation"`
+	Repository         string             `json:"repository"`
+	WorkflowID         int64              `json:"workflow_id"`
+	WorkflowRunID      int64              `json:"workflow_run_id"`
+	ProtectedMainSHA   string             `json:"protected_main_sha"`
+	BaselineRunID      int64              `json:"baseline_run_id"`
+	BaselineRunAttempt int64              `json:"baseline_run_attempt"`
+	ProviderReference  string             `json:"provider_reference"`
+}
+
 func NewBroker(observer, dispatcher *Client) (*Broker, error) {
 	if observer == nil || dispatcher == nil || observer == dispatcher {
 		return nil, errors.New("separate observation and dispatch GitHub App clients are required")
@@ -288,34 +306,60 @@ func NewBroker(observer, dispatcher *Client) (*Broker, error) {
 	return &Broker{observer: observer, dispatcher: dispatcher}, nil
 }
 
-func (broker *Broker) Dispatch(ctx context.Context, target operations.RepositoryTarget, request contract.OperationRequest) operations.DispatchOutcome {
+func (broker *Broker) Prepare(ctx context.Context, target operations.RepositoryTarget, request contract.OperationRequest) (string, operations.DispatchOutcome) {
 	if target.Repository != request.Repository || target.WorkflowIDs[string(request.Operation)] != request.WorkflowID {
-		return operations.DispatchOutcome{ReasonCode: "EXACT_CATALOG_BINDING_FAILED"}
+		return rejectedPreparation("EXACT_CATALOG_BINDING_FAILED")
 	}
 	mainSHA, protected, err := broker.observer.ObserveMain(ctx, request.Repository)
 	if err != nil || !protected || mainSHA != request.ProtectedMainSHA || target.MainBranch != "main" {
-		return operations.DispatchOutcome{ReasonCode: "PROTECTED_MAIN_OBSERVATION_FAILED"}
+		return rejectedPreparation("PROTECTED_MAIN_OBSERVATION_FAILED")
 	}
-	providerReference := ""
-	if request.Operation != contract.OperationRefreshHealth {
+	state := recoveryState{
+		Operation: request.Operation, Repository: request.Repository, WorkflowID: request.WorkflowID,
+		WorkflowRunID: request.WorkflowRunID, ProtectedMainSHA: request.ProtectedMainSHA,
+	}
+	if request.Operation == contract.OperationRefreshHealth {
+		runs, err := broker.observer.ObserveWorkflowRuns(ctx, request.Repository, request.WorkflowID, request.ProtectedMainSHA)
+		if err != nil {
+			return rejectedPreparation("WORKFLOW_RUN_BASELINE_FAILED")
+		}
+		for _, run := range runs {
+			if run.WorkflowID == request.WorkflowID && run.HeadSHA == request.ProtectedMainSHA && run.ID > state.BaselineRunID {
+				state.BaselineRunID = run.ID
+			}
+		}
+	} else {
 		run, err := broker.observer.ObserveRun(ctx, request.Repository, request.WorkflowRunID)
 		if err != nil || run.ID != request.WorkflowRunID || run.WorkflowID != request.WorkflowID || run.HeadSHA != request.ProtectedMainSHA || run.HeadBranch != "main" {
-			return operations.DispatchOutcome{ReasonCode: "WORKFLOW_RUN_BINDING_FAILED"}
+			return rejectedPreparation("WORKFLOW_RUN_BINDING_FAILED")
 		}
-		providerReference = run.HTMLURL
-		if len(providerReference) > 512 || !strings.HasPrefix(providerReference, "https://") || strings.ContainsAny(providerReference, "\r\n\x00") {
-			return operations.DispatchOutcome{ReasonCode: "WORKFLOW_RUN_REFERENCE_INVALID"}
+		state.ProviderReference = run.HTMLURL
+		state.BaselineRunAttempt = run.RunAttempt
+		if len(state.ProviderReference) > 512 || !strings.HasPrefix(state.ProviderReference, "https://") || strings.ContainsAny(state.ProviderReference, "\r\n\x00") {
+			return rejectedPreparation("WORKFLOW_RUN_REFERENCE_INVALID")
 		}
 		if request.Operation == contract.OperationRerunFailed && (run.Status != "completed" || run.Conclusion == "success" || run.Conclusion == "") {
-			return operations.DispatchOutcome{ReasonCode: "WORKFLOW_RUN_NOT_FAILED"}
+			return rejectedPreparation("WORKFLOW_RUN_NOT_FAILED")
 		}
 		if request.Operation == contract.OperationCancelRun && run.Status != "queued" && run.Status != "in_progress" {
-			return operations.DispatchOutcome{ReasonCode: "WORKFLOW_RUN_NOT_CANCELLABLE"}
+			return rejectedPreparation("WORKFLOW_RUN_NOT_CANCELLABLE")
 		}
+	}
+	token, err := encodeRecoveryState(state)
+	if err != nil {
+		return rejectedPreparation("RECOVERY_STATE_INVALID")
+	}
+	return token, operations.DispatchOutcome{}
+}
+
+func (broker *Broker) Dispatch(ctx context.Context, target operations.RepositoryTarget, request contract.OperationRequest, recoveryToken string) operations.DispatchOutcome {
+	state, err := decodeRecoveryState(recoveryToken, target, request)
+	if err != nil {
+		return operations.DispatchOutcome{Final: true, ReasonCode: "RECOVERY_STATE_INVALID"}
 	}
 	status, err := broker.dispatcher.mutate(ctx, request)
 	if err != nil {
-		return operations.DispatchOutcome{ReasonCode: "GITHUB_DISPATCH_FAILED"}
+		return operations.DispatchOutcome{ReasonCode: "GITHUB_DISPATCH_OUTCOME_PENDING"}
 	}
 	expected := http.StatusCreated
 	if request.Operation == contract.OperationCancelRun {
@@ -324,7 +368,79 @@ func (broker *Broker) Dispatch(ctx context.Context, target operations.Repository
 		expected = http.StatusNoContent
 	}
 	if status != expected {
-		return operations.DispatchOutcome{ReasonCode: "GITHUB_DISPATCH_REJECTED"}
+		if status >= http.StatusInternalServerError {
+			return operations.DispatchOutcome{ReasonCode: "GITHUB_DISPATCH_OUTCOME_PENDING"}
+		}
+		return operations.DispatchOutcome{Final: true, ReasonCode: "GITHUB_DISPATCH_REJECTED"}
 	}
-	return operations.DispatchOutcome{Accepted: true, ReasonCode: "GITHUB_OPERATION_ACCEPTED", ProviderReference: providerReference}
+	return operations.DispatchOutcome{Final: true, Accepted: true, ReasonCode: "GITHUB_OPERATION_ACCEPTED", ProviderReference: state.ProviderReference}
+}
+
+func (broker *Broker) Recover(ctx context.Context, target operations.RepositoryTarget, request contract.OperationRequest, recoveryToken string) operations.DispatchOutcome {
+	state, err := decodeRecoveryState(recoveryToken, target, request)
+	if err != nil {
+		return operations.DispatchOutcome{Final: true, ReasonCode: "RECOVERY_STATE_INVALID"}
+	}
+	if request.Operation == contract.OperationRefreshHealth {
+		runs, err := broker.observer.ObserveWorkflowRuns(ctx, request.Repository, request.WorkflowID, request.ProtectedMainSHA)
+		if err != nil {
+			return operations.DispatchOutcome{ReasonCode: "GITHUB_DISPATCH_OUTCOME_PENDING"}
+		}
+		var candidate *WorkflowRun
+		for index := range runs {
+			run := &runs[index]
+			if run.ID > state.BaselineRunID && run.WorkflowID == request.WorkflowID && run.HeadSHA == request.ProtectedMainSHA {
+				if candidate != nil {
+					return operations.DispatchOutcome{ReasonCode: "GITHUB_DISPATCH_OUTCOME_PENDING"}
+				}
+				candidate = run
+			}
+		}
+		if candidate != nil && len(candidate.HTMLURL) <= 512 && strings.HasPrefix(candidate.HTMLURL, "https://") && !strings.ContainsAny(candidate.HTMLURL, "\r\n\x00") {
+			return operations.DispatchOutcome{Final: true, Accepted: true, ReasonCode: "GITHUB_OPERATION_RECOVERED", ProviderReference: candidate.HTMLURL}
+		}
+		return operations.DispatchOutcome{ReasonCode: "GITHUB_DISPATCH_OUTCOME_PENDING"}
+	}
+	run, err := broker.observer.ObserveRun(ctx, request.Repository, request.WorkflowRunID)
+	if err != nil || run.ID != request.WorkflowRunID || run.WorkflowID != request.WorkflowID || run.HeadSHA != request.ProtectedMainSHA {
+		return operations.DispatchOutcome{ReasonCode: "GITHUB_DISPATCH_OUTCOME_PENDING"}
+	}
+	if request.Operation == contract.OperationRerunFailed && run.RunAttempt > state.BaselineRunAttempt {
+		return operations.DispatchOutcome{Final: true, Accepted: true, ReasonCode: "GITHUB_OPERATION_RECOVERED", ProviderReference: state.ProviderReference}
+	}
+	if request.Operation == contract.OperationCancelRun && run.Status == "completed" && run.Conclusion == "cancelled" {
+		return operations.DispatchOutcome{Final: true, Accepted: true, ReasonCode: "GITHUB_OPERATION_RECOVERED", ProviderReference: state.ProviderReference}
+	}
+	return operations.DispatchOutcome{ReasonCode: "GITHUB_DISPATCH_OUTCOME_PENDING"}
+}
+
+func rejectedPreparation(reason string) (string, operations.DispatchOutcome) {
+	return "cHJlcGFyYXRpb24tcmVqZWN0ZWQ", operations.DispatchOutcome{Final: true, ReasonCode: reason}
+}
+
+func encodeRecoveryState(state recoveryState) (string, error) {
+	raw, err := contract.CanonicalJSON(state)
+	if err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(raw), nil
+}
+
+func decodeRecoveryState(token string, target operations.RepositoryTarget, request contract.OperationRequest) (recoveryState, error) {
+	raw, err := base64.RawURLEncoding.DecodeString(token)
+	if err != nil || len(raw) > 3072 {
+		return recoveryState{}, errors.New("recovery state is invalid")
+	}
+	var state recoveryState
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&state); err != nil || decoder.Decode(&struct{}{}) != io.EOF {
+		return recoveryState{}, errors.New("recovery state is invalid")
+	}
+	if state.Operation != request.Operation || state.Repository != request.Repository || state.WorkflowID != request.WorkflowID ||
+		state.WorkflowRunID != request.WorkflowRunID || state.ProtectedMainSHA != request.ProtectedMainSHA ||
+		target.Repository != request.Repository || target.WorkflowIDs[string(request.Operation)] != request.WorkflowID {
+		return recoveryState{}, errors.New("recovery state does not bind the request")
+	}
+	return state, nil
 }
