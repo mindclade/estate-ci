@@ -153,6 +153,6 @@ stable required check remains exactly `Pull request / required`; this repository
 no `.github/workflows` copy of it. Buildkite performs the Go, UI, container, and source-ready gates.
 
 The four files under `generated/` are byte-for-byte outputs from `mindclade/.github` implementation
-revision `b4d28faa5fde98087f60262110a43f25f6da9eb8`. Update them only as one reviewed policy upgrade,
+revision `816955feea11c5c928db6fdd5deedb2d2754c4b8`. Update them only as one reviewed policy upgrade,
 including `ci/source-inventory.json`; `tools/verify_source_inventory.py` rejects partial or extra
 artifacts.

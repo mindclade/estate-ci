@@ -2,7 +2,7 @@
   "schema_version": "estate.required-workflow-profile/v1",
   "authority": {
     "repository": "mindclade/.github",
-    "implementation_revision": "b4d28faa5fde98087f60262110a43f25f6da9eb8"
+    "implementation_revision": "816955feea11c5c928db6fdd5deedb2d2754c4b8"
   },
   "repository": "mindclade/estate-ci",
   "profile": "buildkite-isolated",

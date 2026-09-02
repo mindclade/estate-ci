@@ -3,11 +3,15 @@
   "authority": {
     "policy_digest": "sha256:f2cac5e9ef4933544b042b04b6efeddc74a81e533019a6d42ec19d17c37ab34b",
     "repository": "mindclade/.github",
-    "revision": "b4d28faa5fde98087f60262110a43f25f6da9eb8"
+    "revision": "49a015c2c0cdd6a75a5756eb8c1e95b49d117917"
   },
   "bazel": {
     "startup_jdk_major": 21,
     "version": "9.1.1"
+  },
+  "generator": {
+    "command": "python3 tools/generate_ci_policy.py generate",
+    "source": "config/nix-bazel-policy.json"
   },
   "kind": "ToolchainManifestDefaults",
   "locks": {

@@ -1,21 +1,21 @@
 {
   "api_version": "ci.mindclade.dev/v1",
   "artifacts": {
-    ".github/actions/required-workflow-profile/profiles.generated.json": "sha256:3049581e695aa452427f935fba18954f6e97769cd594cfe13ea551ef89d3a30d",
+    ".github/actions/required-workflow-profile/profiles.generated.json": "sha256:88bd5bcc329969ba69120b98afc7d97c4f92064bc6ab3f7e1fc4a19a447d823b",
     "generated/bazelrc.common": "sha256:e030d15a440dd58298a6189677876f91a24b3dbde9f1c2ec77d1591deb6555f7",
-    "generated/nix-bazel-policy.nix": "sha256:bed186e83238be6fe3e889e3725176cc7d3baa09966d076e79c990d5d719d1df",
-    "generated/toolchain-manifest.defaults.json": "sha256:95f211ac10d3b8b720299d78dee78f8e6270ccc04539177d223b833b2641c76c"
+    "generated/nix-bazel-policy.nix": "sha256:94de498e988895621a349236a1cea5b8937ea318d8b985e7fec7ac3bcb414c19",
+    "generated/toolchain-manifest.defaults.json": "sha256:bc423d86c527398dd6c8c72131e63bd54961380809fbb0712982b2dae3ee8c2f"
   },
   "authority": {
     "repository": "mindclade/.github",
-    "revision": "b4d28faa5fde98087f60262110a43f25f6da9eb8"
+    "revision": "49a015c2c0cdd6a75a5756eb8c1e95b49d117917"
   },
-  "contract_digest": "sha256:17cea0e202665f3253d3693672409bcfeafcbf8a81572b3934036bc3bd5cc918",
+  "contract_digest": "sha256:f50150993359d7888ce9a6cffaa71e9f6132abb10f76ebbc826de51835dbcdb9",
   "kind": "GeneratedPolicyLock",
   "sources": {
     "MODULE.bazel.lock": "sha256:31d5f14670e28b61b58f4886715ad11a4fcd510b6d6148fcf7467d5e0c910e7b",
     "config/nix-bazel-policy.json": "sha256:f618a1adf2e6ca526fb4667f2578f81a1cdbc6579f021d7ebc2dfac87b012b66",
-    "config/required-workflow-profiles.json": "sha256:6e27ae1cc1dc6be3eac2d37bc48af65fc522ebc0f1f9e1dc973c9abfd3457099",
+    "config/required-workflow-profiles.json": "sha256:ca4dcbfbcf20677fc8323d6eaa0d83f27cbf0e5a6d3ac1318d92ada911c0bd95",
     "flake.lock": "sha256:6b4a1a54e12af05bf133ad68c6e08940fa7b04e2a4adbde94374e3f151294509"
   }
 }

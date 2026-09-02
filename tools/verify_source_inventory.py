@@ -10,7 +10,8 @@ from pathlib import Path
 from typing import Any
 
 
-AUTHORITY_REVISION = "b4d28faa5fde98087f60262110a43f25f6da9eb8"
+POLICY_AUTHORITY_REVISION = "49a015c2c0cdd6a75a5756eb8c1e95b49d117917"
+WORKFLOW_IMPLEMENTATION_REVISION = "816955feea11c5c928db6fdd5deedb2d2754c4b8"
 EXPECTED_GENERATED = {
     "generated/bazelrc.common",
     "generated/nix-bazel-policy.lock.json",
@@ -63,7 +64,7 @@ def verify(root: Path) -> None:
         raise VerificationError("source inventory schema version is unsupported")
     if inventory["authority"] != {
         "repository": "mindclade/.github",
-        "implementation_revision": AUTHORITY_REVISION,
+        "implementation_revision": WORKFLOW_IMPLEMENTATION_REVISION,
     }:
         raise VerificationError("source inventory authority is not the approved organization revision")
 
@@ -93,7 +94,10 @@ def verify(root: Path) -> None:
 
     upstream_lock = _load(root / "generated/nix-bazel-policy.lock.json")
     authority = upstream_lock.get("authority")
-    if authority != {"repository": "mindclade/.github", "revision": AUTHORITY_REVISION}:
+    if authority != {
+        "repository": "mindclade/.github",
+        "revision": POLICY_AUTHORITY_REVISION,
+    }:
         raise VerificationError("upstream policy lock authority is invalid")
     upstream_artifacts = upstream_lock.get("artifacts")
     if not isinstance(upstream_artifacts, dict):
@@ -103,13 +107,16 @@ def verify(root: Path) -> None:
             raise VerificationError(f"local artifact does not match upstream lock: {name}")
 
     toolchain = _load(root / "generated/toolchain-manifest.defaults.json")
-    if toolchain.get("authority", {}).get("revision") != AUTHORITY_REVISION:
+    if toolchain.get("authority", {}).get("revision") != POLICY_AUTHORITY_REVISION:
         raise VerificationError("toolchain manifest is not pinned to the approved revision")
     if toolchain.get("supported_systems") != EXPECTED_SYSTEMS:
         raise VerificationError("toolchain manifest supported systems drifted")
 
     profile = _load(root / "ci/required-workflow-profile.json")
-    if profile.get("authority", {}).get("implementation_revision") != AUTHORITY_REVISION:
+    if (
+        profile.get("authority", {}).get("implementation_revision")
+        != WORKFLOW_IMPLEMENTATION_REVISION
+    ):
         raise VerificationError("required workflow profile pin drifted")
     if profile.get("profile") != "buildkite-isolated" or profile.get("required_context") != "Pull request / required":
         raise VerificationError("required workflow profile contract is invalid")
@@ -130,7 +137,11 @@ def main() -> int:
     except VerificationError as error:
         print(f"source inventory verification failed: {error}")
         return 1
-    print(f"source inventory verified at organization revision {AUTHORITY_REVISION}")
+    print(
+        "source inventory verified at organization workflow revision "
+        f"{WORKFLOW_IMPLEMENTATION_REVISION} and policy revision "
+        f"{POLICY_AUTHORITY_REVISION}"
+    )
     return 0
 
 
