@@ -311,6 +311,10 @@ func (server *Server) createOperation(writer http.ResponseWriter, request *http.
 			problem(writer, http.StatusServiceUnavailable, "OPERATION_PENDING_RECONCILIATION", "The provider outcome is pending observation; retry this exact request without changing its request ID.")
 		case errors.Is(err, operations.ErrDenied):
 			problem(writer, http.StatusForbidden, "OPERATION_DENIED", "Approval or evidence policy denied this operation.")
+		case errors.Is(err, operations.ErrOperationNotCatalogued):
+			problem(writer, http.StatusBadRequest, "OPERATION_NOT_CATALOGUED", "This repository does not support the requested operation.")
+		case errors.Is(err, operations.ErrOperationDisabled):
+			problem(writer, http.StatusServiceUnavailable, "OPERATION_DISABLED", "This operation remains disabled until its qualification gate passes.")
 		case errors.Is(err, operations.ErrUnready) && receipt.ReceiptID != "":
 			writeJSON(writer, http.StatusServiceUnavailable, receipt)
 		case errors.Is(err, operations.ErrUnready):

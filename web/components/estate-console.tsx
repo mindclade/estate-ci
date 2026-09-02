@@ -281,37 +281,41 @@ function Operations({ session, repositories, targets, receipts, onReceipt }: { s
   const [selectedEvidence, setSelectedEvidence] = useState<WorkflowEvidence | null>(null);
   const target = targets.find((item) => item.repository === repository);
   const health = repositories.find((item) => item.repository === repository);
+  const operationNames: OperationName[] = ["refresh_estate_health", "rerun_failed_required_workflow", "cancel_superseded_workflow_run"];
+  const supportedOperations = operationNames.filter((name) => target?.operations[name]);
+  const selectedOperation = target?.operations[operation] ? operation : supportedOperations[0];
+  const capability = selectedOperation ? target?.operations[selectedOperation] : undefined;
 
   useEffect(() => {
     if (!health) return;
     api<WorkflowEvidence>(`/api/v1/evidence?digest=${encodeURIComponent(health.evidence_digest)}`).then((approved) => {
       setSelectedEvidence(approved);
-      setOperation(approved.approval.operation);
+      if (target?.operations[approved.approval.operation]) setOperation(approved.approval.operation);
       setReason(approved.approval.reason);
     }).catch((error: Error) => setMessage(error.message));
-  }, [health]);
+  }, [health, target]);
 
-  const approvalMatches = selectedEvidence?.approval.operation === operation &&
+  const approvalMatches = selectedEvidence?.approval.operation === selectedOperation &&
     selectedEvidence.approval.requested_by === session.email && selectedEvidence.approval.reason === reason &&
-    selectedEvidence.repository === repository && selectedEvidence.workflow_id === target?.workflow_ids[operation];
-  const canOperate = session.operation_submission_enabled && ["operator", "approver", "admin"].includes(session.role) && target && selectedEvidence && approvalMatches;
+    selectedEvidence.repository === repository && selectedEvidence.workflow_id === capability?.workflow_id;
+  const canOperate = session.operation_submission_enabled && ["operator", "approver", "admin"].includes(session.role) && capability?.enabled && selectedEvidence && approvalMatches;
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!target || !selectedEvidence) return;
+    if (!target || !selectedEvidence || !selectedOperation) return;
     setSubmitting(true);
     setMessage("");
     const body = {
       schema_version: "estate.operation-intent/v1",
       request_id: crypto.randomUUID(),
-      operation,
+      operation: selectedOperation,
       repository,
-      workflow_id: target.workflow_ids[operation],
-      workflow_run_id: operation === "refresh_estate_health" ? 0 : selectedEvidence.workflow_run_id,
+      workflow_id: capability?.workflow_id,
+      workflow_run_id: selectedOperation === "refresh_estate_health" ? 0 : selectedEvidence.workflow_run_id,
       protected_main_sha: selectedEvidence.protected_main_sha,
       plan_digest: selectedEvidence.plan_digest,
       evidence_digest: selectedEvidence.digest,
       reason,
-      expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString().replace(/\.\d{3}Z$/, "Z"),
+      expires_at: selectedEvidence.expires_at,
     };
     try {
       const receipt = await api<OperationReceipt>("/api/v1/operations", {
@@ -321,7 +325,7 @@ function Operations({ session, repositories, targets, receipts, onReceipt }: { s
       });
       onReceipt(receipt);
       setReason("");
-      setMessage(`${operationLabel(operation)} accepted.`);
+      setMessage(`${operationLabel(selectedOperation)} accepted.`);
     } catch (submitError) {
       setMessage(submitError instanceof Error ? submitError.message : "Operation was not accepted.");
     } finally {
@@ -334,10 +338,10 @@ function Operations({ session, repositories, targets, receipts, onReceipt }: { s
       <section><SectionHeading title="Governed operation" detail={session.connected_dispatch ? "Connected dispatcher" : session.runtime_state === "development-simulation" ? "Local simulation" : "Dispatch disabled"} />
         <form className="operation-form" onSubmit={submit}>
           <label className="field"><span>Repository</span><select value={repository} onChange={(event) => setRepository(event.target.value)}>{repositories.map((item) => <option key={item.repository}>{item.repository}</option>)}</select></label>
-          <label className="field"><span>Operation</span><select value={operation} onChange={(event) => setOperation(event.target.value as OperationName)}><option value="rerun_failed_required_workflow">Rerun failed required workflow</option><option value="cancel_superseded_workflow_run">Cancel superseded workflow run</option><option value="refresh_estate_health">Refresh estate health</option></select></label>
-          <div className="binding-row"><span><GitBranch size={15} />main <code>{shortSHA(selectedEvidence?.protected_main_sha ?? "")}</code></span><span><ShieldCheck size={15} />workflow {target?.workflow_ids[operation] || "unresolved"}</span></div>
+          <label className="field"><span>Operation</span><select value={selectedOperation ?? ""} disabled={supportedOperations.length === 0} onChange={(event) => setOperation(event.target.value as OperationName)}>{supportedOperations.length === 0 ? <option value="">No catalogued operations</option> : supportedOperations.map((name) => <option key={name} value={name}>{operationLabel(name)}{target?.operations[name]?.enabled ? "" : " (awaiting qualification)"}</option>)}</select></label>
+          <div className="binding-row"><span><GitBranch size={15} />main <code>{shortSHA(selectedEvidence?.protected_main_sha ?? "")}</code></span><span><ShieldCheck size={15} />workflow {capability?.workflow_id || "unsupported"}</span></div>
           <label className="field"><span>Reason</span><textarea value={reason} onChange={(event) => setReason(event.target.value)} minLength={10} maxLength={500} rows={4} required /></label>
-          <button className="primary-button" disabled={!canOperate || submitting || reason.trim().length < 10} type="submit">{submitting ? <LoaderCircle className="spin" size={17} /> : <Play size={17} />}{submitting ? "Submitting" : operationLabel(operation)}</button>
+          <button className="primary-button" disabled={!canOperate || submitting || reason.trim().length < 10} type="submit">{submitting ? <LoaderCircle className="spin" size={17} /> : <Play size={17} />}{submitting ? "Submitting" : selectedOperation ? operationLabel(selectedOperation) : "Unavailable"}</button>
           {message && <p className="form-message">{message}</p>}
         </form>
       </section>

@@ -63,6 +63,9 @@ func (service *Service) Create(ctx context.Context, identity auth.Identity, call
 	}
 	target, err := service.catalog.Authorize(intent)
 	if err != nil {
+		if errors.Is(err, ErrOperationNotCatalogued) || errors.Is(err, ErrOperationDisabled) {
+			return contract.OperationReceipt{}, err
+		}
 		return contract.OperationReceipt{}, fmt.Errorf("%w: %v", ErrUnready, err)
 	}
 	if existing, err := service.repository.GetRequest(ctx, intent.RequestID); err == nil {

@@ -63,8 +63,11 @@
               bash
               cacert
               coreutils
+              cosign
               findutils
               git
+              google-cloud-sdk
+              grype
               gnugrep
               gnumake
               gnused
@@ -77,6 +80,7 @@
               ripgrep
               shellcheck
               stdenv.cc
+              syft
               toolchainManifest
               zizmor
             ]

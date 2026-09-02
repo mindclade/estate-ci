@@ -1,13 +1,13 @@
 {
-  "schema_version": "estate.operation-catalog/v1",
+  "schema_version": "estate.operation-catalog/v2",
   "connected": true,
   "repositories": [
-    {"repository":"mindclade/.github","main_branch":"main","workflow_ids":{"refresh_estate_health":1001,"rerun_failed_required_workflow":1002,"cancel_superseded_workflow_run":1002}},
-    {"repository":"mindclade/bootstrap","main_branch":"main","workflow_ids":{"refresh_estate_health":2001,"rerun_failed_required_workflow":2002,"cancel_superseded_workflow_run":2002}},
-    {"repository":"mindclade/estate-ci","main_branch":"main","workflow_ids":{"refresh_estate_health":3001,"rerun_failed_required_workflow":3002,"cancel_superseded_workflow_run":3002}},
-    {"repository":"mindclade/github-config","main_branch":"main","workflow_ids":{"refresh_estate_health":4001,"rerun_failed_required_workflow":4002,"cancel_superseded_workflow_run":4002}},
-    {"repository":"mindclade/gitops","main_branch":"main","workflow_ids":{"refresh_estate_health":5001,"rerun_failed_required_workflow":5002,"cancel_superseded_workflow_run":5002}},
-    {"repository":"mindclade/infrastructure-live","main_branch":"main","workflow_ids":{"refresh_estate_health":6001,"rerun_failed_required_workflow":6002,"cancel_superseded_workflow_run":6002}},
-    {"repository":"mindclade/mindclade","main_branch":"main","workflow_ids":{"refresh_estate_health":7001,"rerun_failed_required_workflow":7002,"cancel_superseded_workflow_run":7002}}
+    {"repository":"mindclade/.github","main_branch":"main","operations":{"refresh_estate_health":{"workflow_id":1001,"enabled":true},"rerun_failed_required_workflow":{"workflow_id":1002,"enabled":true},"cancel_superseded_workflow_run":{"workflow_id":1002,"enabled":true}}},
+    {"repository":"mindclade/bootstrap","main_branch":"main","operations":{"rerun_failed_required_workflow":{"workflow_id":2002,"enabled":true},"cancel_superseded_workflow_run":{"workflow_id":2002,"enabled":true}}},
+    {"repository":"mindclade/estate-ci","main_branch":"main","operations":{}},
+    {"repository":"mindclade/github-config","main_branch":"main","operations":{"rerun_failed_required_workflow":{"workflow_id":4002,"enabled":true},"cancel_superseded_workflow_run":{"workflow_id":4002,"enabled":true}}},
+    {"repository":"mindclade/gitops","main_branch":"main","operations":{"rerun_failed_required_workflow":{"workflow_id":5002,"enabled":true},"cancel_superseded_workflow_run":{"workflow_id":5002,"enabled":true}}},
+    {"repository":"mindclade/infrastructure-live","main_branch":"main","operations":{"rerun_failed_required_workflow":{"workflow_id":6002,"enabled":true},"cancel_superseded_workflow_run":{"workflow_id":6002,"enabled":true}}},
+    {"repository":"mindclade/mindclade","main_branch":"main","operations":{"rerun_failed_required_workflow":{"workflow_id":7002,"enabled":true},"cancel_superseded_workflow_run":{"workflow_id":7002,"enabled":true}}}
   ]
 }

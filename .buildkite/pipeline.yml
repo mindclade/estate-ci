@@ -36,3 +36,87 @@ steps:
     depends_on: [api-contract, operations-ui, containers]
     commands:
       - make validate-source
+
+  - block: ":closed_lock_with_key: Approve immutable release"
+    key: approve-release
+    depends_on: source-ready
+    if: "build.branch == pipeline.default_branch && build.pull_request.id == null"
+    prompt: "Release the protected-main estate-ci source as signed immutable images"
+    allowed_teams:
+      - release-engineering
+
+  - label: ":package: Publish signed immutable images"
+    key: publish-images
+    depends_on: approve-release
+    if: "build.branch == pipeline.default_branch && build.pull_request.id == null"
+    concurrency: 1
+    concurrency_group: estate-ci/immutable-release
+    commands:
+      - |
+        set -euo pipefail
+        : "${ESTATE_ARTIFACT_REGISTRY:?required Artifact Registry repository}"
+        : "${ESTATE_COSIGN_KMS_KEY:?required gcpkms:// signing key URI}"
+        : "${ESTATE_RELEASE_BUCKET:?required release handoff bucket}"
+        : "${ESTATE_SOURCE_EVIDENCE_DIGEST:?required sha256 source evidence digest}"
+        [[ "${BUILDKITE_BRANCH}" == "${BUILDKITE_PIPELINE_DEFAULT_BRANCH}" ]]
+        [[ "${BUILDKITE_PULL_REQUEST:-false}" == "false" ]]
+        [[ "${BUILDKITE_COMMIT}" =~ ^[0-9a-f]{40}$ ]]
+        [[ "${ESTATE_SOURCE_EVIDENCE_DIGEST}" =~ ^sha256:[0-9a-f]{64}$ ]]
+
+        umask 077
+        release_dir="$(mktemp -d)"
+        trap 'rm -rf "${release_dir}"' EXIT
+        for component in api web; do
+          image="${ESTATE_ARTIFACT_REGISTRY}/estate-ci-${component}"
+          ref="${image}:${BUILDKITE_COMMIT}"
+          metadata="${release_dir}/${component}.metadata.json"
+          docker buildx build \
+            --file "Dockerfile.${component}" \
+            --metadata-file "${metadata}" \
+            --platform linux/amd64,linux/arm64 \
+            --provenance=mode=max \
+            --pull=false \
+            --push \
+            --sbom=true \
+            --tag "${ref}" \
+            .
+          digest="$(jq -er '."containerimage.digest" | select(test("^sha256:[0-9a-f]{64}$"))' "${metadata}")"
+          immutable_ref="${image}@${digest}"
+          syft "${immutable_ref}" -o "spdx-json=${release_dir}/${component}.sbom.spdx.json"
+          grype "${immutable_ref}" --fail-on high --output json > "${release_dir}/${component}.vulnerabilities.json"
+          jq -n \
+            --arg repository "${BUILDKITE_REPO}" \
+            --arg revision "${BUILDKITE_COMMIT}" \
+            --arg build "${BUILDKITE_BUILD_URL}" \
+            --arg image "${immutable_ref}" \
+            '{
+              builder: {id: "buildkite://mindclade/estate-ci"},
+              buildType: "https://github.com/moby/buildkit/blob/master/docs/attestations/slsa-definitions.md",
+              invocation: {
+                configSource: {uri: $repository, digest: {sha1: $revision}, entryPoint: ".buildkite/pipeline.yml"}
+              },
+              metadata: {buildInvocationId: $build, completeness: {parameters: true, environment: false, materials: true}, reproducible: false},
+              materials: [{uri: $repository, digest: {sha1: $revision}}],
+              subject: [{name: $image}]
+            }' > "${release_dir}/${component}.provenance.json"
+          cosign sign --yes --key "${ESTATE_COSIGN_KMS_KEY}" "${immutable_ref}"
+          cosign attest --yes --key "${ESTATE_COSIGN_KMS_KEY}" --type spdxjson \
+            --predicate "${release_dir}/${component}.sbom.spdx.json" "${immutable_ref}"
+          cosign attest --yes --key "${ESTATE_COSIGN_KMS_KEY}" --type slsaprovenance \
+            --predicate "${release_dir}/${component}.provenance.json" "${immutable_ref}"
+          jq -n --arg image "${image}" --arg digest "${digest}" '{image: $image, digest: $digest}' \
+            > "${release_dir}/${component}.json"
+        done
+
+        jq -cS -n \
+          --arg revision "${BUILDKITE_COMMIT}" \
+          --arg evidence_digest "${ESTATE_SOURCE_EVIDENCE_DIGEST}" \
+          --slurpfile api "${release_dir}/api.json" \
+          --slurpfile web "${release_dir}/web.json" \
+          '{schema_version:"estate.release/v1",source_revision:$revision,evidence_digest:$evidence_digest,images:{api:$api[0],web:$web[0]}}' \
+          > "${release_dir}/release.json"
+        release_digest="sha256:$(sha256sum "${release_dir}/release.json" | awk '{print $1}')"
+        object="gs://${ESTATE_RELEASE_BUCKET}/releases/estate-ci/${BUILDKITE_COMMIT}/release.json"
+        gcloud storage cp --if-generation-match=0 "${release_dir}/release.json" "${object}"
+        buildkite-agent artifact upload "${release_dir}/*.json"
+        printf 'release_object=%s\nrelease_digest=%s\n' "${object}" "${release_digest}"

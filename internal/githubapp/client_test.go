@@ -106,10 +106,16 @@ func TestRefreshDispatchUsesObservedSHAAndRecoversLostResponse(t *testing.T) {
 			}
 			_ = json.NewEncoder(writer).Encode(map[string]any{"workflow_runs": runs})
 		case request.Method == http.MethodPost && request.URL.Path == "/repos/mindclade/bootstrap/actions/workflows/43/dispatches":
-			var body map[string]string
+			var body struct {
+				Ref    string            `json:"ref"`
+				Inputs map[string]string `json:"inputs"`
+			}
 			_ = json.NewDecoder(request.Body).Decode(&body)
 			mu.Lock()
-			postedRef = body["ref"]
+			postedRef = body.Ref
+			if body.Inputs["source_revision"] != testSHA || body.Inputs["evidence_digest"] != "sha256:"+strings.Repeat("a", 64) {
+				t.Errorf("workflow dispatch inputs = %#v", body.Inputs)
+			}
 			dispatched = true
 			mu.Unlock()
 			panic(http.ErrAbortHandler)
@@ -121,7 +127,7 @@ func TestRefreshDispatchUsesObservedSHAAndRecoversLostResponse(t *testing.T) {
 	observer, _ := NewClient(server.Client(), staticToken("observe-token"), server.URL)
 	dispatcher, _ := NewClient(server.Client(), staticToken("dispatch-token"), server.URL)
 	broker, _ := NewBroker(observer, dispatcher)
-	request := contract.OperationRequest{Operation: contract.OperationRefreshHealth, Repository: "mindclade/bootstrap", WorkflowID: 43, ProtectedMainSHA: testSHA}
+	request := contract.OperationRequest{Operation: contract.OperationRefreshHealth, Repository: "mindclade/bootstrap", WorkflowID: 43, ProtectedMainSHA: testSHA, EvidenceDigest: "sha256:" + strings.Repeat("a", 64)}
 	target := operations.RepositoryTarget{Repository: request.Repository, MainBranch: "main", WorkflowIDs: map[string]int64{string(request.Operation): request.WorkflowID}}
 	token, prepared := broker.Prepare(context.Background(), target, request)
 	if prepared.Final {

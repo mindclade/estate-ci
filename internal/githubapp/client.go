@@ -250,7 +250,13 @@ func (client *Client) mutate(ctx context.Context, request contract.OperationRequ
 		body = []byte("{}")
 	case contract.OperationRefreshHealth:
 		methodPath = fmt.Sprintf("/repos/%s/actions/workflows/%d/dispatches", request.Repository, request.WorkflowID)
-		body = []byte(fmt.Sprintf(`{"ref":"%s"}`, request.ProtectedMainSHA))
+		body, _ = json.Marshal(map[string]any{
+			"ref": request.ProtectedMainSHA,
+			"inputs": map[string]string{
+				"evidence_digest": request.EvidenceDigest,
+				"source_revision": request.ProtectedMainSHA,
+			},
+		})
 	default:
 		return 0, errors.New("unsupported GitHub mutation")
 	}
@@ -307,7 +313,7 @@ func NewBroker(observer, dispatcher *Client) (*Broker, error) {
 }
 
 func (broker *Broker) Prepare(ctx context.Context, target operations.RepositoryTarget, request contract.OperationRequest) (string, operations.DispatchOutcome) {
-	if target.Repository != request.Repository || target.WorkflowIDs[string(request.Operation)] != request.WorkflowID {
+	if target.Repository != request.Repository || targetWorkflowID(target, request.Operation) != request.WorkflowID {
 		return rejectedPreparation("EXACT_CATALOG_BINDING_FAILED")
 	}
 	mainSHA, protected, err := broker.observer.ObserveMain(ctx, request.Repository)
@@ -439,8 +445,15 @@ func decodeRecoveryState(token string, target operations.RepositoryTarget, reque
 	}
 	if state.Operation != request.Operation || state.Repository != request.Repository || state.WorkflowID != request.WorkflowID ||
 		state.WorkflowRunID != request.WorkflowRunID || state.ProtectedMainSHA != request.ProtectedMainSHA ||
-		target.Repository != request.Repository || target.WorkflowIDs[string(request.Operation)] != request.WorkflowID {
+		target.Repository != request.Repository || targetWorkflowID(target, request.Operation) != request.WorkflowID {
 		return recoveryState{}, errors.New("recovery state does not bind the request")
 	}
 	return state, nil
+}
+
+func targetWorkflowID(target operations.RepositoryTarget, operation contract.Operation) int64 {
+	if capability, ok := target.Operations[string(operation)]; ok {
+		return capability.WorkflowID
+	}
+	return target.WorkflowIDs[string(operation)]
 }

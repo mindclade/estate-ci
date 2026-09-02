@@ -258,7 +258,10 @@ func seedDevelopment(repository *storage.MemoryRepository, catalog *operations.C
 	mainSHA := "0123456789abcdef0123456789abcdef01234567"
 	repositories := make([]contract.RepositoryHealth, 0)
 	for index, target := range catalog.Repositories() {
-		workflowID := target.WorkflowIDs[string(contract.OperationRerunFailed)]
+		workflowID := int64(9000 + index)
+		if capability, ok := target.Operations[string(contract.OperationRerunFailed)]; ok {
+			workflowID = capability.WorkflowID
+		}
 		planDigest := fmt.Sprintf("sha256:%064x", index+1)
 		approvedReason := "Retry the failed required workflow after runner recovery"
 		evidence := contract.WorkflowEvidence{

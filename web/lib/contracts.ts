@@ -55,7 +55,7 @@ export type OperationName =
 export type RepositoryTarget = {
   repository: string;
   main_branch: "main";
-  workflow_ids: Record<OperationName, number>;
+  operations: Partial<Record<OperationName, { workflow_id: number; enabled: boolean }>>;
 };
 
 export type OperationReceipt = {

@@ -136,7 +136,7 @@ GitHub App identities. Activation is owned by reviewed configuration in the `git
 3. Bind a dedicated Google service account through Workload Identity with least privilege.
 4. Configure IAP and exact Workspace group resource names.
 5. Install separate observation and dispatch GitHub Apps with repository-scoped permissions.
-6. Resolve every catalog workflow ID from GitHub, review it, and change `connected` to `true`.
+6. Resolve each supported catalog capability from GitHub, omit unsupported repository/operation pairs, review every positive workflow ID, and change `connected` to `true` with operations disabled until qualified.
 7. Mount separate GitHub App keys and an Ed25519 operation signing key as 0400/0600 owner-only
    files or 0440 files readable only by the dedicated pod `fsGroup`. Kubernetes projected Secret
    `..data` links are accepted only when their resolved regular files remain inside the configured

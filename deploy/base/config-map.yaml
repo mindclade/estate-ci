@@ -13,15 +13,15 @@ data:
     [{"resource":"groups/unresolved-viewers","role":"viewer"},{"resource":"groups/unresolved-operators","role":"operator"},{"resource":"groups/unresolved-approvers","role":"approver"},{"resource":"groups/unresolved-admins","role":"admin"}]
   repositories.json: |
     {
-      "schema_version": "estate.operation-catalog/v1",
+      "schema_version": "estate.operation-catalog/v2",
       "connected": false,
       "repositories": [
-        {"repository":"mindclade/.github","main_branch":"main","workflow_ids":{"refresh_estate_health":0,"rerun_failed_required_workflow":0,"cancel_superseded_workflow_run":0}},
-        {"repository":"mindclade/bootstrap","main_branch":"main","workflow_ids":{"refresh_estate_health":0,"rerun_failed_required_workflow":0,"cancel_superseded_workflow_run":0}},
-        {"repository":"mindclade/estate-ci","main_branch":"main","workflow_ids":{"refresh_estate_health":0,"rerun_failed_required_workflow":0,"cancel_superseded_workflow_run":0}},
-        {"repository":"mindclade/github-config","main_branch":"main","workflow_ids":{"refresh_estate_health":0,"rerun_failed_required_workflow":0,"cancel_superseded_workflow_run":0}},
-        {"repository":"mindclade/gitops","main_branch":"main","workflow_ids":{"refresh_estate_health":0,"rerun_failed_required_workflow":0,"cancel_superseded_workflow_run":0}},
-        {"repository":"mindclade/infrastructure-live","main_branch":"main","workflow_ids":{"refresh_estate_health":0,"rerun_failed_required_workflow":0,"cancel_superseded_workflow_run":0}},
-        {"repository":"mindclade/mindclade","main_branch":"main","workflow_ids":{"refresh_estate_health":0,"rerun_failed_required_workflow":0,"cancel_superseded_workflow_run":0}}
+        {"repository":"mindclade/.github","main_branch":"main","operations":{}},
+        {"repository":"mindclade/bootstrap","main_branch":"main","operations":{}},
+        {"repository":"mindclade/estate-ci","main_branch":"main","operations":{}},
+        {"repository":"mindclade/github-config","main_branch":"main","operations":{}},
+        {"repository":"mindclade/gitops","main_branch":"main","operations":{}},
+        {"repository":"mindclade/infrastructure-live","main_branch":"main","operations":{}},
+        {"repository":"mindclade/mindclade","main_branch":"main","operations":{}}
       ]
     }
