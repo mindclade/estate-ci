@@ -1,0 +1,26 @@
+{
+  "api_version": "ci.mindclade.dev/v1",
+  "authority": {
+    "policy_digest": "sha256:f2cac5e9ef4933544b042b04b6efeddc74a81e533019a6d42ec19d17c37ab34b",
+    "repository": "mindclade/.github",
+    "revision": "b4d28faa5fde98087f60262110a43f25f6da9eb8"
+  },
+  "bazel": {
+    "startup_jdk_major": 21,
+    "version": "9.1.1"
+  },
+  "kind": "ToolchainManifestDefaults",
+  "locks": {
+    "MODULE.bazel.lock": "sha256:31d5f14670e28b61b58f4886715ad11a4fcd510b6d6148fcf7467d5e0c910e7b",
+    "flake.lock": "sha256:6b4a1a54e12af05bf133ad68c6e08940fa7b04e2a4adbde94374e3f151294509"
+  },
+  "nixpkgs": {
+    "nar_hash": "sha256-VYXO0XZlgj06dxJZRhrD3WoSsvq/c7+/Akyoa22pefw=",
+    "revision": "83199d0d373dd3ac2b9a1996b1d0263f76ab7a4c"
+  },
+  "supported_systems": [
+    "aarch64-darwin",
+    "aarch64-linux",
+    "x86_64-linux"
+  ]
+}

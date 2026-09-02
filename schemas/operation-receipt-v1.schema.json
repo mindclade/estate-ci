@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://estate-ci.mindclade.dev/schemas/operation-receipt-v1.schema.json",
+  "title": "OperationReceipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "receipt_id", "request_id", "request_digest", "operation", "repository", "status", "reason_code", "provider_reference", "recorded_at", "audit_object", "digest", "signature"],
+  "properties": {
+    "schema_version": {"const": "estate.operation-receipt/v1"},
+    "receipt_id": {"$ref": "#/$defs/uuidv4"},
+    "request_id": {"$ref": "#/$defs/uuidv4"},
+    "request_digest": {"$ref": "#/$defs/digest"},
+    "operation": {"enum": ["refresh_estate_health", "rerun_failed_required_workflow", "cancel_superseded_workflow_run"]},
+    "repository": {"type": "string", "pattern": "^mindclade/(\\.github|[a-z0-9][a-z0-9._-]{0,99})$"},
+    "status": {"enum": ["accepted", "rejected"]},
+    "reason_code": {"type": "string", "pattern": "^[A-Z][A-Z0-9_]{2,63}$"},
+    "provider_reference": {"type": "string", "maxLength": 512, "pattern": "^((https://|simulation://)[^\\r\\n\\u0000]*|)$"},
+    "recorded_at": {"type": "string", "format": "date-time"},
+    "audit_object": {"type": "string", "pattern": "^audit/operations/[0-9]{4}/[0-9]{2}/[0-9]{2}/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\\.json$"},
+    "digest": {"$ref": "#/$defs/digest"},
+    "signature": {"$ref": "operation-request-v1.schema.json#/$defs/signature"}
+  },
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "uuidv4": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"}
+  }
+}

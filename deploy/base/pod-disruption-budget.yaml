@@ -1,0 +1,15 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: estate-ci-api
+spec:
+  minAvailable: 1
+  selector: {matchLabels: {app.kubernetes.io/name: estate-ci-api}}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: estate-ci-web
+spec:
+  minAvailable: 1
+  selector: {matchLabels: {app.kubernetes.io/name: estate-ci-web}}

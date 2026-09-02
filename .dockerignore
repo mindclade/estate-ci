@@ -1,0 +1,17 @@
+.git
+.github
+.buildkite
+.idea
+.vscode
+**/.DS_Store
+**/.env
+**/.env.*
+!web/.env.example
+**/node_modules
+**/.next
+**/coverage
+**/*.log
+deploy
+docs
+README.md
+SECURITY.md

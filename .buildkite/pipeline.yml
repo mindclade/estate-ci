@@ -1,0 +1,38 @@
+env:
+  CGO_ENABLED: "0"
+
+steps:
+  - label: ":go: API contract"
+    key: api-contract
+    commands:
+      - gofmt -d cmd internal | tee /tmp/gofmt.diff
+      - test ! -s /tmp/gofmt.diff
+      - go vet ./cmd/... ./internal/...
+      - go test -race -count=1 -coverprofile=/tmp/api-coverage.out ./cmd/... ./internal/...
+      - go tool cover -func=/tmp/api-coverage.out
+
+  - label: ":typescript: Operations UI"
+    key: operations-ui
+    commands:
+      - cd web
+      - npm ci --ignore-scripts
+      - npm run lint
+      - npm run typecheck
+      - npm test
+      - npm run build
+      - "! rg -n 'local-development' .next/server .next/static .next/standalone"
+
+  - label: ":docker: Immutable containers"
+    key: containers
+    depends_on: [api-contract, operations-ui]
+    commands:
+      - docker build --pull=false --network=none --tag estate-ci-api:source-ready --file Dockerfile.api .
+      - docker build --pull=false --tag estate-ci-web:source-ready --file Dockerfile.web .
+      - test "$(docker image inspect estate-ci-api:source-ready --format '{{.Config.User}}')" = "65532:65532"
+      - test "$(docker image inspect estate-ci-web:source-ready --format '{{.Config.User}}')" = "1000:1000"
+
+  - label: ":lock: Source-ready gate"
+    key: source-ready
+    depends_on: [api-contract, operations-ui, containers]
+    commands:
+      - make validate-source

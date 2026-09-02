@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: estate-ci-config
+data:
+  ESTATE_MODE: source-ready
+  ESTATE_ALLOWED_ORIGIN: https://estate-ci.invalid
+  IAP_AUDIENCE: /projects/0/global/backendServices/0
+  HEALTH_BUCKET: unresolved-estate-health
+  AUDIT_BUCKET: unresolved-estate-audit
+  OPERATION_SIGNING_KEY_ID: unresolved-signing-key-v1
+  WORKSPACE_GROUP_BINDINGS_JSON: >-
+    [{"resource":"groups/unresolved-viewers","role":"viewer"},{"resource":"groups/unresolved-operators","role":"operator"},{"resource":"groups/unresolved-approvers","role":"approver"},{"resource":"groups/unresolved-admins","role":"admin"}]
+  repositories.json: |
+    {
+      "schema_version": "estate.operation-catalog/v1",
+      "connected": false,
+      "repositories": [
+        {"repository":"mindclade/.github","main_branch":"main","workflow_ids":{"refresh_estate_health":0,"rerun_failed_required_workflow":0,"cancel_superseded_workflow_run":0}},
+        {"repository":"mindclade/bootstrap","main_branch":"main","workflow_ids":{"refresh_estate_health":0,"rerun_failed_required_workflow":0,"cancel_superseded_workflow_run":0}},
+        {"repository":"mindclade/estate-ci","main_branch":"main","workflow_ids":{"refresh_estate_health":0,"rerun_failed_required_workflow":0,"cancel_superseded_workflow_run":0}},
+        {"repository":"mindclade/github-config","main_branch":"main","workflow_ids":{"refresh_estate_health":0,"rerun_failed_required_workflow":0,"cancel_superseded_workflow_run":0}},
+        {"repository":"mindclade/gitops","main_branch":"main","workflow_ids":{"refresh_estate_health":0,"rerun_failed_required_workflow":0,"cancel_superseded_workflow_run":0}},
+        {"repository":"mindclade/infrastructure-live","main_branch":"main","workflow_ids":{"refresh_estate_health":0,"rerun_failed_required_workflow":0,"cancel_superseded_workflow_run":0}},
+        {"repository":"mindclade/mindclade","main_branch":"main","workflow_ids":{"refresh_estate_health":0,"rerun_failed_required_workflow":0,"cancel_superseded_workflow_run":0}}
+      ]
+    }

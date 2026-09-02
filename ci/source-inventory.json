@@ -1,0 +1,38 @@
+{
+  "schema_version": "estate.source-inventory/v1",
+  "authority": {
+    "repository": "mindclade/.github",
+    "implementation_revision": "b4d28faa5fde98087f60262110a43f25f6da9eb8"
+  },
+  "generated_artifacts": {
+    "generated/bazelrc.common": "sha256:e030d15a440dd58298a6189677876f91a24b3dbde9f1c2ec77d1591deb6555f7",
+    "generated/nix-bazel-policy.lock.json": "sha256:2b62ba1f6d731678b97035cc89d2f1433b9c00eaa9a3b2332ceb167bc30f2f87",
+    "generated/nix-bazel-policy.nix": "sha256:bed186e83238be6fe3e889e3725176cc7d3baa09966d076e79c990d5d719d1df",
+    "generated/toolchain-manifest.defaults.json": "sha256:95f211ac10d3b8b720299d78dee78f8e6270ccc04539177d223b833b2641c76c"
+  },
+  "required_sources": [
+    ".buildkite/pipeline.yml",
+    "Dockerfile.api",
+    "Dockerfile.web",
+    "api/openapi.json",
+    "ci/required-workflow-profile.json",
+    "cmd/estate-ci-api/main.go",
+    "config/repositories.source-ready.json",
+    "deploy/base/kustomization.yaml",
+    "go.mod",
+    "internal/api/server.go",
+    "internal/auth/iap.go",
+    "internal/auth/roles.go",
+    "internal/contract/models.go",
+    "internal/githubapp/client.go",
+    "internal/operations/service.go",
+    "internal/storage/gcs.go",
+    "schemas/estate-health-v1.schema.json",
+    "schemas/operation-receipt-v1.schema.json",
+    "schemas/operation-request-v1.schema.json",
+    "schemas/workflow-evidence-v1.schema.json",
+    "web/app/page.tsx",
+    "web/components/estate-console.tsx",
+    "web/package-lock.json"
+  ]
+}

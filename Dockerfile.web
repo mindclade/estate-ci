@@ -1,0 +1,18 @@
+# syntax=docker/dockerfile:1.7
+FROM node:24-alpine3.23@sha256:0388af2af070cd4736a1567cfed02469ba117848845b4165d87a333edb53d2ca AS dependencies
+WORKDIR /app
+COPY web/package.json web/package-lock.json ./
+RUN npm ci --ignore-scripts
+
+FROM dependencies AS build
+COPY web ./
+RUN npm run build
+
+FROM node:24-alpine3.23@sha256:0388af2af070cd4736a1567cfed02469ba117848845b4165d87a333edb53d2ca AS runtime
+WORKDIR /app
+ENV NODE_ENV=production HOSTNAME=0.0.0.0 PORT=3000
+COPY --from=build --chown=node:node /app/.next/standalone ./
+COPY --from=build --chown=node:node /app/.next/static ./.next/static
+USER 1000:1000
+EXPOSE 3000
+CMD ["node", "server.js"]

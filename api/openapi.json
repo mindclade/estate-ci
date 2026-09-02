@@ -1,0 +1,40 @@
+{
+  "openapi": "3.1.0",
+  "info": {"title": "Mindclade Estate CI API", "version": "1.0.0"},
+  "servers": [{"url": "/api/v1"}],
+  "security": [{"iapAssertion": []}],
+  "paths": {
+    "/session": {"get": {"operationId": "getSession", "responses": {"200": {"description": "IAP identity, Workspace role, and CSRF token"}, "401": {"$ref": "#/components/responses/Problem"}}}},
+    "/estate": {"get": {"operationId": "getEstateHealth", "responses": {"200": {"description": "Latest immutable health snapshot", "content": {"application/json": {"schema": {"$ref": "../schemas/estate-health-v1.schema.json"}}}}}}},
+    "/estate/history": {"get": {"operationId": "listEstateHistory", "parameters": [{"$ref": "#/components/parameters/Limit"}], "responses": {"200": {"description": "Bounded health snapshot history"}}}},
+    "/repositories": {"get": {"operationId": "listRepositories", "responses": {"200": {"description": "Repository health from the latest snapshot"}}}},
+    "/repositories/{owner}/{repository}": {"get": {"operationId": "getRepositoryHealth", "parameters": [{"name": "owner", "in": "path", "required": true, "schema": {"const": "mindclade"}}, {"name": "repository", "in": "path", "required": true, "schema": {"type": "string", "pattern": "^(\\.github|[a-z0-9][a-z0-9._-]{0,99})$"}}], "responses": {"200": {"description": "Repository health"}, "404": {"$ref": "#/components/responses/Problem"}}}},
+    "/evidence": {"get": {"operationId": "getEvidence", "parameters": [{"name": "digest", "in": "query", "required": true, "schema": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}}], "responses": {"200": {"description": "Immutable workflow evidence", "content": {"application/json": {"schema": {"$ref": "../schemas/workflow-evidence-v1.schema.json"}}}}}}},
+    "/operations/options": {"get": {"operationId": "getOperationOptions", "responses": {"200": {"description": "Fixed repository and workflow catalog"}}}},
+    "/operations": {
+      "get": {"operationId": "listOperations", "parameters": [{"$ref": "#/components/parameters/Limit"}], "responses": {"200": {"description": "Immutable operation receipts"}}},
+      "post": {"operationId": "createOperation", "parameters": [{"name": "X-Estate-CSRF", "in": "header", "required": true, "schema": {"type": "string"}}], "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/OperationIntent"}}}}, "responses": {"202": {"description": "Signed operation accepted", "content": {"application/json": {"schema": {"$ref": "../schemas/operation-receipt-v1.schema.json"}}}}, "403": {"$ref": "#/components/responses/Problem"}, "409": {"$ref": "#/components/responses/Problem"}, "503": {"description": "Connected dispatch unavailable or rejected"}}}
+    },
+    "/operations/{receipt_id}": {"get": {"operationId": "getOperation", "parameters": [{"name": "receipt_id", "in": "path", "required": true, "schema": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"}}], "responses": {"200": {"description": "Immutable operation receipt"}, "404": {"$ref": "#/components/responses/Problem"}}}}
+  },
+  "components": {
+    "securitySchemes": {"iapAssertion": {"type": "apiKey", "in": "header", "name": "X-Goog-IAP-JWT-Assertion", "description": "Injected and signed by Google IAP; never supplied by browser code."}},
+    "parameters": {"Limit": {"name": "limit", "in": "query", "required": false, "schema": {"type": "integer", "minimum": 1, "maximum": 100}}},
+    "responses": {"Problem": {"description": "RFC 9457 problem", "content": {"application/problem+json": {"schema": {"type": "object", "required": ["type", "title", "status", "code", "detail"]}}}}},
+    "schemas": {
+      "OperationIntent": {
+        "type": "object", "additionalProperties": false,
+        "required": ["schema_version", "request_id", "operation", "repository", "workflow_id", "workflow_run_id", "protected_main_sha", "plan_digest", "evidence_digest", "reason", "expires_at"],
+        "properties": {
+          "schema_version": {"const": "estate.operation-intent/v1"}, "request_id": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},
+          "operation": {"enum": ["refresh_estate_health", "rerun_failed_required_workflow", "cancel_superseded_workflow_run"]},
+          "repository": {"type": "string", "pattern": "^mindclade/(\\.github|[a-z0-9][a-z0-9._-]{0,99})$"},
+          "workflow_id": {"type": "integer", "minimum": 1}, "workflow_run_id": {"type": "integer", "minimum": 0},
+          "protected_main_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"}, "plan_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "evidence_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}, "reason": {"type": "string", "minLength": 10, "maxLength": 500, "pattern": "^[^\\s\\r\\n\\u0000](?:[^\\r\\n\\u0000]*[^\\s\\r\\n\\u0000])?$"},
+          "expires_at": {"type": "string", "format": "date-time"}
+        }
+      }
+    }
+  }
+}

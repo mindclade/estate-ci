@@ -1,0 +1,19 @@
+# syntax=docker/dockerfile:1.7
+FROM golang:1.25-alpine3.23@sha256:27b3069b25647beacd3745b0b2c83e2f9b8d3935455a32cd4531236ee1c960e0 AS build
+WORKDIR /src
+COPY go.mod ./
+COPY cmd ./cmd
+COPY internal ./internal
+ARG TARGETOS=linux
+ARG TARGETARCH
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
+    go build -trimpath -ldflags='-s -w -buildid=' -o /out/estate-ci-api ./cmd/estate-ci-api
+
+FROM scratch
+COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+COPY --from=build /out/estate-ci-api /estate-ci-api
+COPY config/repositories.source-ready.json /config/repositories.source-ready.json
+USER 65532:65532
+EXPOSE 8080
+ENV ESTATE_CATALOG_PATH=/config/repositories.source-ready.json
+ENTRYPOINT ["/estate-ci-api"]
