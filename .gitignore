@@ -8,3 +8,7 @@ dist/
 web/.next/
 web/node_modules/
 web/tsconfig.tsbuildinfo
+
+# Claude Code agent worktrees and local session state. These are live git
+# worktrees, so committing them would add unresolvable gitlinks to the tree.
+.claude/
