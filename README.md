@@ -151,6 +151,10 @@ default-deny networking, and `ESTATE_MODE=source-ready`. Do not apply them direc
 The repository uses the centrally owned organization workflow profile `buildkite-isolated`. The
 stable required check remains exactly `Pull request / required`; this repository intentionally has
 no `.github/workflows` copy of it. Buildkite performs the Go, UI, container, and source-ready gates.
+`estate-ci` is governed by a Buildkite-only execution contract: repository-local
+`.github/workflows` artifacts are forbidden, including an empty `.github/workflows` directory.
+See [ci/source-inventory-governance.md](ci/source-inventory-governance.md) for the explicit contract and
+verification behavior.
 
 The four files under `generated/` are byte-for-byte outputs from `mindclade/.github` implementation
 revision `816955feea11c5c928db6fdd5deedb2d2754c4b8`. Update them only as one reviewed policy upgrade,

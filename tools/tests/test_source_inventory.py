@@ -50,10 +50,16 @@ class SourceInventoryTest(unittest.TestCase):
             verify(self.root)
 
     def test_local_required_workflow_fails_closed(self) -> None:
+        workflow_dir = self.root / ".github/workflows"
+        workflow_dir.mkdir(parents=True)
+        with self.assertRaisesRegex(VerificationError, "forbidden"):
+            verify(self.root)
+
+    def test_local_required_workflow_file_fails_closed(self) -> None:
         workflow = self.root / ".github/workflows/required.yml"
         workflow.parent.mkdir(parents=True)
         workflow.write_text("name: Pull request\n")
-        with self.assertRaisesRegex(VerificationError, "workflows are forbidden"):
+        with self.assertRaisesRegex(VerificationError, "forbidden"):
             verify(self.root)
 
 

@@ -16,6 +16,7 @@
     "Dockerfile.web",
     "api/openapi.json",
     "ci/required-workflow-profile.json",
+    "ci/source-inventory-governance.md",
     "cmd/estate-ci-api/main.go",
     "config/repositories.source-ready.json",
     "deploy/base/kustomization.yaml",

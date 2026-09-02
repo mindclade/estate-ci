@@ -20,3 +20,6 @@ inventory verifier.
 
 The central organization workflow owns `Pull request / required`. Do not add a workflow with that
 name or check context to this repository.
+
+Do not create a `.github/workflows` directory in this repository under any circumstance. This contract is
+Buildkite-only, centralized in `.github`, and includes an explicit no-local-workflow requirement.

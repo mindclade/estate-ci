@@ -124,8 +124,16 @@ def verify(root: Path) -> None:
         raise VerificationError("repository-local required workflow must remain forbidden")
 
     workflow_dir = root / ".github/workflows"
-    if workflow_dir.exists() and any(path.is_file() for path in workflow_dir.rglob("*")):
-        raise VerificationError("repository-local GitHub Actions workflows are forbidden")
+    if workflow_dir.exists():
+        if any(path.is_file() for path in workflow_dir.rglob("*")):
+            raise VerificationError(
+                "repository-local GitHub Actions workflows are forbidden for estate-ci; use the "
+                "centrally owned .github contract only"
+            )
+        raise VerificationError(
+            "repository-local .github/workflows directory is forbidden for this Buildkite-only "
+            "repository"
+        )
 
 
 def main() -> int:
